@@ -467,9 +467,15 @@ def fingerprint_report_page():
                     if not error_log_df.empty:
                         st.subheader("❌ Error Log")
                         st.dataframe(error_log_df, use_container_width=True)
+                    
+                    # Fix: Correctly prepare BytesIO for downloading the error log DataFrame
+                    error_log_output_buffer = io.BytesIO()
+                    with pd.ExcelWriter(error_log_output_buffer, engine='openpyxl') as writer:
+                        error_log_df.to_excel(writer, sheet_name='Error Log', index=False)
+                    
                     st.download_button(
                         label="📥 Download Error Log (Excel)",
-                        data=io.BytesIO(pd.DataFrame(error_log).to_excel(index=False).encode('utf-8')).getvalue(),
+                        data=error_log_output_buffer.getvalue(),
                         file_name="Error_Log.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         type="secondary"
