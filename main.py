@@ -3,6 +3,8 @@ import streamlit as st
 from photo_sku import photo_sku_generator_page
 # Import the new page function for fingerprint reports
 from fingerprint_report_page import fingerprint_report_page
+# Import the new login page function
+from login_page import login_page
 
 # --- Page Functions ---
 
@@ -22,33 +24,41 @@ def home_page():
 def main():
     st.set_page_config(page_title="D&H Group Web App", page_icon="🌐", layout="wide")
 
-    # Initialize session state for page navigation if not already set
+    # Initialize session state for page navigation and login status
     if 'page' not in st.session_state:
         st.session_state.page = 'home' # Default to home page
+    if 'logged_in' not in st.session_state:
+        st.session_state.logged_in = False # Default to not logged in
 
-    # --- Sidebar for Navigation ---
-    with st.sidebar:
-        st.header("Navigation")
-        if st.button("🏠 Home", use_container_width=True, key="nav_home"):
-            st.session_state.page = 'home'
-        if st.button("📷 SKU Generator", use_container_width=True, key="nav_sku"):
-            st.session_state.page = 'sku_generator'
-        if st.button("⏰ Fingerprint Reports", use_container_width=True, key="nav_fingerprint"):
-            st.session_state.page = 'fingerprint_reports'
-        # Add more buttons here for future pages (e.g., if you create a 'contact.py' file)
-        # if st.button("📞 Contact Us", use_container_width=True):
-        #     st.session_state.page = 'contact'
+    # Check if user is logged in
+    if not st.session_state.logged_in:
+        # If not logged in, display the login page
+        login_page()
+    else:
+        # If logged in, display the main app content with sidebar navigation
+        with st.sidebar:
+            st.header("Navigation")
+            if st.button("🏠 Home", use_container_width=True, key="nav_home"):
+                st.session_state.page = 'home'
+            if st.button("📷 SKU Generator", use_container_width=True, key="nav_sku"):
+                st.session_state.page = 'sku_generator'
+            if st.button("⏰ Fingerprint Reports", use_container_width=True, key="nav_fingerprint"):
+                st.session_state.page = 'fingerprint_reports'
+            
+            st.markdown("---") # Separator for logout button
+            if st.button("🚪 Logout", use_container_width=True, key="logout_button"):
+                st.session_state.logged_in = False
+                st.session_state.page = 'home' # Reset page to home after logout
+                st.experimental_rerun() # Rerun to show login page
 
-    # --- Display Pages based on session state ---
-    if st.session_state.page == 'home':
-        home_page()
-    elif st.session_state.page == 'sku_generator':
-        photo_sku_generator_page()
-    elif st.session_state.page == 'fingerprint_reports':
-        fingerprint_report_page()
-    # Add conditions for other pages here
-    # elif st.session_session.page == 'contact':
-    #     contact_page() # Assuming contact_page() is defined in contact.py or directly here
+        # --- Display Pages based on session state ---
+        if st.session_state.page == 'home':
+            home_page()
+        elif st.session_state.page == 'sku_generator':
+            photo_sku_generator_page()
+        elif st.session_state.page == 'fingerprint_reports':
+            fingerprint_report_page()
+        # Add conditions for other pages here
 
 if __name__ == "__main__":
     main()
