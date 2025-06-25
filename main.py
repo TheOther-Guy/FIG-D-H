@@ -1,6 +1,8 @@
 import streamlit as st
 # Import the page functions from photo_sku.py
 from photo_sku import photo_sku_generator_page
+# Import the new page function for fingerprint reports
+from fingerprint_report_page import fingerprint_report_page
 
 # --- Page Functions ---
 
@@ -9,6 +11,12 @@ def home_page():
     Displays the home page of the application.
     """
     st.markdown("<h1 style='text-align: center; color: #1E90FF;'>D&H Group Web App</h1>", unsafe_allow_html=True)
+    st.markdown("""
+        <div style="text-align: center; padding: 20px;">
+            <p style="font-size: 1.2em;">Welcome to the D&H Group Web App!</p>
+            <p>Use the sidebar navigation to explore different tools and generators.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
 # Main Streamlit application entry point
 def main():
@@ -21,10 +29,12 @@ def main():
     # --- Sidebar for Navigation ---
     with st.sidebar:
         st.header("Navigation")
-        if st.button("🏠 Home", use_container_width=True):
+        if st.button("🏠 Home", use_container_width=True, key="nav_home"):
             st.session_state.page = 'home'
-        if st.button("📷 SKU Generator", use_container_width=True):
+        if st.button("📷 SKU Generator", use_container_width=True, key="nav_sku"):
             st.session_state.page = 'sku_generator'
+        if st.button("⏰ Fingerprint Reports", use_container_width=True, key="nav_fingerprint"):
+            st.session_state.page = 'fingerprint_reports'
         # Add more buttons here for future pages (e.g., if you create a 'contact.py' file)
         # if st.button("📞 Contact Us", use_container_width=True):
         #     st.session_state.page = 'contact'
@@ -34,9 +44,12 @@ def main():
         home_page()
     elif st.session_state.page == 'sku_generator':
         photo_sku_generator_page()
+    elif st.session_state.page == 'fingerprint_reports':
+        fingerprint_report_page()
     # Add conditions for other pages here
-    # elif st.session_state.page == 'contact':
+    # elif st.session_session.page == 'contact':
     #     contact_page() # Assuming contact_page() is defined in contact.py or directly here
 
 if __name__ == "__main__":
     main()
+
