@@ -410,16 +410,33 @@ def fingerprint_report_page():
     st.title("📊 Employee Fingerprint Report Generator")
     st.info("⬆️ Upload one or more CSV or Excel files containing employee fingerprint data.")
 
-    # File uploader to accept multiple CSV/Excel files
+    # Initialize a counter in session state to control the file uploader's key
+    # Incrementing this counter forces the uploader to reset its state.
+    if 'uploader_key_counter' not in st.session_state:
+        st.session_state.uploader_key_counter = 0
+    # Initialize a flag to indicate if data has been successfully processed and displayed
+    if 'processed_data_present' not in st.session_state:
+        st.session_state.processed_data_present = False
+    if 'detailed_report_df_cache' not in st.session_state:
+        st.session_state.detailed_report_df_cache = pd.DataFrame()
+    if 'summary_report_df_cache' not in st.session_state:
+        st.session_state.summary_report_df_cache = pd.DataFrame()
+    if 'error_log_df_cache' not in st.session_state:
+        st.session_state.error_log_df_cache = pd.DataFrame()
+    if 'download_filename_cache' not in st.session_state:
+        st.session_state.download_filename_cache = "Employee_Punch_Reports.xlsx"
+
+
+    # Create the file uploader with a dynamic key
+    # Changing the key forces the widget to "reset" its internal state
     uploaded_files = st.file_uploader(
         "Select fingerprint files (.csv, .xls, .xlsx)",
         type=["csv", "xls", "xlsx"],
         accept_multiple_files=True,
-        key="fingerprint_file_uploader" # Unique key for this uploader
+        key=f"fingerprint_file_uploader_{st.session_state.uploader_key_counter}" # Dynamic key
     )
 
     # Text input for custom filename
-    # Provide a default value
     default_filename = "Employee_Punch_Reports"
     custom_filename = st.text_input(
         "Enter desired filename for the report (without extension):",
@@ -427,74 +444,106 @@ def fingerprint_report_page():
         key="report_filename_input"
     )
 
-    if uploaded_files:
-        if st.button("🚀 Generate Reports", type="primary"):
-            with st.spinner("Processing files and generating reports... This may take a moment."):
-                detailed_report_df, error_log = calculate_shift_durations_from_uploads(uploaded_files)
-                
-                # Convert error_log list to DataFrame for the error sheet
-                error_log_df = pd.DataFrame(error_log)
-                if error_log_df.empty:
-                    error_log_df = pd.DataFrame([{'Filename': 'N/A', 'Error': 'No errors recorded during file processing.'}])
+    col1, col2 = st.columns([1, 1])
 
-                # Determine the actual filename to use for download
-                download_filename = f"{custom_filename.strip()}.xlsx" if custom_filename.strip() else f"{default_filename}.xlsx"
+    with col1:
+        generate_button = st.button("🚀 Generate Reports", type="primary")
 
+    with col2:
+        # Add the "New Files" button
+        if st.button("🔄 New Files (Clear and Reset)", key="new_files_button"):
+            # Increment the uploader key counter to reset the file uploader
+            st.session_state.uploader_key_counter += 1
+            # Reset the processed data flag
+            st.session_state.processed_data_present = False
+            # Clear cached dataframes
+            st.session_state.detailed_report_df_cache = pd.DataFrame()
+            st.session_state.summary_report_df_cache = pd.DataFrame()
+            st.session_state.error_log_df_cache = pd.DataFrame()
+            st.session_state.download_filename_cache = "Employee_Punch_Reports.xlsx"
+            # Force a rerun to apply the changes and clear the display
+            st.rerun() 
 
-                if not detailed_report_df.empty:
-                    st.success(f"✅ Successfully processed data for {len(detailed_report_df)} daily records!")
-                    summary_report_df = generate_summary_report(detailed_report_df.copy()) # Pass a copy
+    # Process and display logic, triggered by the "Generate Reports" button and presence of files
+    if generate_button and uploaded_files:
+        st.session_state.processed_data_present = True # Set flag that data has been processed
+        with st.spinner("Processing files and generating reports... This may take a moment."):
+            detailed_report_df, error_log = calculate_shift_durations_from_uploads(uploaded_files)
+            
+            # Cache the processed dataframes in session state
+            st.session_state.detailed_report_df_cache = detailed_report_df
+            st.session_state.summary_report_df_cache = generate_summary_report(detailed_report_df.copy()) if not detailed_report_df.empty else pd.DataFrame()
+            
+            # Convert error_log list to DataFrame for the error sheet and cache it
+            error_log_df_for_cache = pd.DataFrame(error_log)
+            if error_log_df_for_cache.empty:
+                error_log_df_for_cache = pd.DataFrame([{'Filename': 'N/A', 'Error': 'No errors recorded during file processing.'}])
+            st.session_state.error_log_df_cache = error_log_df_for_cache
+            
+            # Determine and cache the actual filename to use for download
+            st.session_state.download_filename_cache = f"{custom_filename.strip()}.xlsx" if custom_filename.strip() else f"{default_filename}.xlsx"
 
-                    # Display previews
-                    st.subheader("📋 Detailed Report Preview")
-                    st.dataframe(detailed_report_df.head(), use_container_width=True) # Show only head for large reports
-
-                    if not summary_report_df.empty:
-                        st.subheader("📈 Summary Report Preview")
-                        st.dataframe(summary_report_df.head(), use_container_width=True)
-                    else:
-                        st.warning("⚠️ Summary Report could not be generated (detailed report might be empty or issues during summary generation).")
-
-                    if not error_log_df.empty:
-                        st.subheader("❌ Error Log Preview")
-                        st.dataframe(error_log_df, use_container_width=True) # Show full error log
-
-                    # Prepare Excel file for download
-                    output_buffer = io.BytesIO()
-                    with pd.ExcelWriter(output_buffer, engine='openpyxl') as writer:
-                        detailed_report_df.to_excel(writer, sheet_name='Detailed Report', index=False)
-                        if not summary_report_df.empty:
-                            summary_report_df.to_excel(writer, sheet_name='Summary Report', index=False)
-                        error_log_df.to_excel(writer, sheet_name='Error Log', index=False)
-                    
-                    # Provide download button with custom filename
-                    st.download_button(
-                        label="📥 Download All Reports (Excel)",
-                        data=output_buffer.getvalue(),
-                        file_name=download_filename, # Use the custom or default filename
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        type="secondary"
-                    )
-                else:
-                    st.error("❌ No valid data could be processed from the uploaded files. Please check the file formats and column names.")
-                    if not error_log_df.empty:
-                        st.subheader("❌ Error Log")
-                        st.dataframe(error_log_df, use_container_width=True)
-                    
-                    # Correctly prepare BytesIO for downloading the error log DataFrame
-                    error_log_output_buffer = io.BytesIO()
-                    with pd.ExcelWriter(error_log_output_buffer, engine='openpyxl') as writer:
-                        error_log_df.to_excel(writer, sheet_name='Error Log', index=False)
-                    
-                    # Provide download button for error log with a distinct name
-                    st.download_button(
-                        label="📥 Download Error Log (Excel)",
-                        data=error_log_output_buffer.getvalue(),
-                        file_name=f"{custom_filename.strip()}_Error_Log.xlsx" if custom_filename.strip() else "Error_Log.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        type="secondary"
-                    )
-
-    else:
+            # Rerun to display results from session state and enable download buttons
+            st.rerun() 
+    elif uploaded_files is None and not st.session_state.processed_data_present: # Initial state or after "New Files" reset
         st.info("Please upload your fingerprint files to start the report generation.")
+    
+    # Display results and download buttons only if data has been processed (flag is true)
+    if st.session_state.processed_data_present:
+        # Retrieve cached dataframes for display and download
+        detailed_report_df = st.session_state.detailed_report_df_cache
+        summary_report_df = st.session_state.summary_report_df_cache
+        error_log_df = st.session_state.error_log_df_cache
+        download_filename = st.session_state.download_filename_cache
 
+        if not detailed_report_df.empty:
+            st.success(f"✅ Successfully processed data for {len(detailed_report_df)} daily records!")
+            
+            st.subheader("📋 Detailed Report Preview")
+            st.dataframe(detailed_report_df.head(), use_container_width=True)
+
+            if not summary_report_df.empty:
+                st.subheader("📈 Summary Report Preview")
+                st.dataframe(summary_report_df.head(), use_container_width=True)
+            else:
+                st.warning("⚠️ Summary Report could not be generated (detailed report might be empty or issues during summary generation).")
+
+            if not error_log_df.empty:
+                st.subheader("❌ Error Log Preview")
+                st.dataframe(error_log_df, use_container_width=True)
+
+            # Prepare Excel file for download
+            output_buffer = io.BytesIO()
+            with pd.ExcelWriter(output_buffer, engine='openpyxl') as writer:
+                detailed_report_df.to_excel(writer, sheet_name='Detailed Report', index=False)
+                if not summary_report_df.empty:
+                    summary_report_df.to_excel(writer, sheet_name='Summary Report', index=False)
+                error_log_df.to_excel(writer, sheet_name='Error Log', index=False)
+            
+            # Provide download button with custom filename
+            st.download_button(
+                label="📥 Download All Reports (Excel)",
+                data=output_buffer.getvalue(),
+                file_name=download_filename, # Use the custom or default filename
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="secondary"
+            )
+        else:
+            st.error("❌ No valid data could be processed from the uploaded files. Please check the file formats and column names.")
+            if not error_log_df.empty:
+                st.subheader("❌ Error Log")
+                st.dataframe(error_log_df, use_container_width=True)
+            
+            # Correctly prepare BytesIO for downloading the error log DataFrame
+            error_log_output_buffer = io.BytesIO()
+            with pd.ExcelWriter(error_log_output_buffer, engine='openpyxl') as writer:
+                error_log_df.to_excel(writer, sheet_name='Error Log', index=False)
+            
+            # Provide download button for error log with a distinct name
+            st.download_button(
+                label="📥 Download Error Log (Excel)",
+                data=error_log_output_buffer.getvalue(),
+                file_name=f"{custom_filename.strip()}_Error_Log.xlsx" if custom_filename.strip() else "Error_Log.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="secondary"
+            )
