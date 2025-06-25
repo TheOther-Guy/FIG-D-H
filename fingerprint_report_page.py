@@ -418,6 +418,15 @@ def fingerprint_report_page():
         key="fingerprint_file_uploader" # Unique key for this uploader
     )
 
+    # Text input for custom filename
+    # Provide a default value
+    default_filename = "Employee_Punch_Reports"
+    custom_filename = st.text_input(
+        "Enter desired filename for the report (without extension):",
+        value=default_filename,
+        key="report_filename_input"
+    )
+
     if uploaded_files:
         if st.button("🚀 Generate Reports", type="primary"):
             with st.spinner("Processing files and generating reports... This may take a moment."):
@@ -427,6 +436,10 @@ def fingerprint_report_page():
                 error_log_df = pd.DataFrame(error_log)
                 if error_log_df.empty:
                     error_log_df = pd.DataFrame([{'Filename': 'N/A', 'Error': 'No errors recorded during file processing.'}])
+
+                # Determine the actual filename to use for download
+                download_filename = f"{custom_filename.strip()}.xlsx" if custom_filename.strip() else f"{default_filename}.xlsx"
+
 
                 if not detailed_report_df.empty:
                     st.success(f"✅ Successfully processed data for {len(detailed_report_df)} daily records!")
@@ -454,11 +467,11 @@ def fingerprint_report_page():
                             summary_report_df.to_excel(writer, sheet_name='Summary Report', index=False)
                         error_log_df.to_excel(writer, sheet_name='Error Log', index=False)
                     
-                    # Provide download button
+                    # Provide download button with custom filename
                     st.download_button(
                         label="📥 Download All Reports (Excel)",
                         data=output_buffer.getvalue(),
-                        file_name="Employee_Punch_Reports.xlsx",
+                        file_name=download_filename, # Use the custom or default filename
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         type="secondary"
                     )
@@ -468,15 +481,16 @@ def fingerprint_report_page():
                         st.subheader("❌ Error Log")
                         st.dataframe(error_log_df, use_container_width=True)
                     
-                    # Fix: Correctly prepare BytesIO for downloading the error log DataFrame
+                    # Correctly prepare BytesIO for downloading the error log DataFrame
                     error_log_output_buffer = io.BytesIO()
                     with pd.ExcelWriter(error_log_output_buffer, engine='openpyxl') as writer:
                         error_log_df.to_excel(writer, sheet_name='Error Log', index=False)
                     
+                    # Provide download button for error log with a distinct name
                     st.download_button(
                         label="📥 Download Error Log (Excel)",
                         data=error_log_output_buffer.getvalue(),
-                        file_name="Error_Log.xlsx",
+                        file_name=f"{custom_filename.strip()}_Error_Log.xlsx" if custom_filename.strip() else "Error_Log.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         type="secondary"
                     )
