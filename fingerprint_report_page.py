@@ -584,6 +584,9 @@ def calculate_shift_durations_from_uploads(uploaded_files: list, selected_compan
         total_break_duration = pd.Timedelta(seconds=0)
         punch_status = "N/A"
         individual_interval_details = []
+        
+        # New flag to track if shifts/breaks were inferred from a specific pattern
+        has_inferred_shifts_breaks_pattern = False 
 
         first_punch_time_formatted = 'N/A'
         last_punch_time_formatted = 'N/A'
@@ -599,11 +602,16 @@ def calculate_shift_durations_from_uploads(uploaded_files: list, selected_compan
             punch_status = "Single Punch (0 Shift Duration)" # If only one punch, no duration
 
         elif cleaned_punch_count >= 2: # At least two punches, can calculate total presence
-            total_shift_duration = cleaned_group.iloc[-1]['Date/Time'] - cleaned_group.iloc[0]['Date/Time']
             
-            if status_column_was_present:
-                # Attempt to find shift/break patterns if status is available
-                # This logic assumes C/In, C/Out, C/In, C/Out for 2 shifts 1 break
+            # --- Attempt 1: Infer shifts/breaks based on alternating Status (C/In, C/Out) ---
+            is_status_alternating_useful = False
+            if status_column_was_present and cleaned_punch_count >= 2:
+                # Check if there's at least one status change (e.g., In -> Out, or Out -> In)
+                if any(cleaned_group.iloc[i]['Status'] != cleaned_group.iloc[i+1]['Status'] for i in range(len(cleaned_group) - 1)):
+                    is_status_alternating_useful = True
+            
+            if is_status_alternating_useful:
+                # Specific 4-punch pattern (C/In, C/Out, C/In, C/Out)
                 if cleaned_punch_count == 4 and \
                    cleaned_group.iloc[0]['Status'] == 'C/In' and \
                    cleaned_group.iloc[1]['Status'] == 'C/Out' and \
@@ -613,33 +621,78 @@ def calculate_shift_durations_from_uploads(uploaded_files: list, selected_compan
                     shift1 = cleaned_group.iloc[1]['Date/Time'] - cleaned_group.iloc[0]['Date/Time']
                     break1 = cleaned_group.iloc[2]['Date/Time'] - cleaned_group.iloc[1]['Date/Time']
                     shift2 = cleaned_group.iloc[3]['Date/Time'] - cleaned_group.iloc[2]['Date/Time']
-                    total_shift_duration = shift1 + shift2 # Recalculate based on actual shifts
+                    
+                    total_shift_duration = shift1 + shift2
                     total_break_duration = break1
                     punch_status = "Two Shifts with One Break (4 Punches, Status Matched)"
                     individual_interval_details.append({'type': 'Shift', 'duration': shift1})
                     individual_interval_details.append({'type': 'Break', 'duration': break1})
                     individual_interval_details.append({'type': 'Shift', 'duration': shift2})
+                    has_inferred_shifts_breaks_pattern = True
                 else:
-                    # Generic handling for other multi-punch scenarios with status, showing total presence
-                    punch_status = f"Complex Pattern ({cleaned_punch_count} Cleaned Punches with Status)"
-                    # Iterate through cleaned punches to log intervals
+                    # More general alternating status patterns for shift/break determination
                     for i in range(len(cleaned_group) - 1):
                         interval = cleaned_group.iloc[i+1]['Date/Time'] - cleaned_group.iloc[i]['Date/Time']
-                        interval_type = "General" # Default
-                        # Simple attempt to infer based on status sequence (can be more complex if needed)
-                        if cleaned_group.iloc[i]['Status'].endswith('/In') and cleaned_group.iloc[i+1]['Status'].endswith('/Out'):
-                            interval_type = "Shift"
-                        elif cleaned_group.iloc[i]['Status'].endswith('/Out') and cleaned_group.iloc[i+1]['Status'].endswith('/In'):
-                            interval_type = "Break"
-                        individual_interval_details.append({'type': interval_type, 'duration': interval})
+                        current_status = cleaned_group.iloc[i]['Status']
+                        next_status = cleaned_group.iloc[i+1]['Status']
+
+                        if 'C/In' in current_status and 'C/Out' in next_status:
+                            individual_interval_details.append({'type': 'Shift', 'duration': interval})
+                        elif 'C/Out' in current_status and 'C/In' in next_status:
+                            individual_interval_details.append({'type': 'Break', 'duration': interval})
+                        else:
+                            individual_interval_details.append({'type': 'General', 'duration': interval})
                     
-            else: # Status column was NOT present
-                punch_status = f"Total Presence ({cleaned_punch_count} Punches, No Status Data)"
-                # Total shift duration is already (last - first)
-                total_break_duration = pd.Timedelta(seconds=0) # Cannot determine breaks without status
-                # Log only the overall interval
-                if cleaned_punch_count > 1:
-                    individual_interval_details.append({'type': 'Total Presence', 'duration': total_shift_duration})
+                    # Sum durations from individual_interval_details to get totals
+                    for item in individual_interval_details:
+                        if item['type'] == 'Shift':
+                            total_shift_duration += item['duration']
+                        elif item['type'] == 'Break':
+                            total_break_duration += item['duration']
+                    
+                    if total_shift_duration > pd.Timedelta(seconds=0) or total_break_duration > pd.Timedelta(seconds=0):
+                        punch_status = f"Complex Pattern ({cleaned_punch_count} Cleaned Punches with Status, Inferred Intervals)"
+                        has_inferred_shifts_breaks_pattern = True
+            
+            # --- Attempt 2: Apply 3-interval/4-punch logic if no useful status (e.g., all C/In) ---
+            # This block runs ONLY if the status-based inference above didn't yield a result
+            if not has_inferred_shifts_breaks_pattern and cleaned_punch_count >= 4:
+                # User's specific logic for files without reliable status changes (like S14)
+                # P1, P2, P3, P4
+                # (P2 - P1) = Shift 1
+                # (P3 - P2) = Break 1
+                # (P4 - P3) = Shift 2
+                
+                inferred_shift1 = cleaned_group.iloc[1]['Date/Time'] - cleaned_group.iloc[0]['Date/Time']
+                inferred_break1 = cleaned_group.iloc[2]['Date/Time'] - cleaned_group.iloc[1]['Date/Time']
+                inferred_shift2 = cleaned_group.iloc[3]['Date/Time'] - cleaned_group.iloc[2]['Date/Time']
+
+                total_shift_duration = inferred_shift1 + inferred_shift2
+                total_break_duration = inferred_break1
+                punch_status = f"Inferred Two Shifts with One Break ({cleaned_punch_count} Cleaned Punches, Consistent Status/No Status Data)"
+                
+                individual_interval_details = [] # Clear any previous general intervals
+                individual_interval_details.append({'type': 'Shift', 'duration': inferred_shift1})
+                individual_interval_details.append({'type': 'Break', 'duration': inferred_break1})
+                individual_interval_details.append({'type': 'Shift', 'duration': inferred_shift2})
+                
+                # If there are more than 4 punches, add remaining as general intervals.
+                # These extra intervals are reported but do not affect the total_shift_duration or total_break_duration
+                # determined by the 2-shift/1-break pattern.
+                if cleaned_punch_count > 4:
+                    punch_status += " (+ additional punches beyond 4th)"
+                    for i in range(3, cleaned_punch_count - 1): 
+                        interval = cleaned_group.iloc[i+1]['Date/Time'] - cleaned_group.iloc[i]['Date/Time']
+                        individual_interval_details.append({'type': 'General', 'duration': interval})
+                
+                has_inferred_shifts_breaks_pattern = True
+
+            # --- Final Fallback: If no specific shift/break pattern was inferred ---
+            if not has_inferred_shifts_breaks_pattern:
+                total_shift_duration = cleaned_group.iloc[-1]['Date/Time'] - cleaned_group.iloc[0]['Date/Time']
+                total_break_duration = pd.Timedelta(seconds=0) # Cannot determine breaks without patterns
+                punch_status = f"Total Presence ({cleaned_punch_count} Cleaned Punches, No Inferred Breaks/Unclear Patterns)"
+                individual_interval_details = [{'type': 'Total Presence', 'duration': total_shift_duration}]
 
         # Calculate Daily Overtime and Under-time and set flags
         daily_overtime_td = pd.Timedelta(seconds=0)
@@ -687,9 +740,10 @@ def calculate_shift_durations_from_uploads(uploaded_files: list, selected_compan
             'Source_Name': source_name, # Keep individual source name for detailed report
             'Original Number of Punches': original_punch_count,
             'Number of Cleaned Punches': cleaned_punch_count,
-            'First Punch Time': 'N/A', 'Last Punch Time': 'N/A',
+            'First Punch Time': first_punch_time_formatted, # Use formatted time
+            'Last Punch Time': last_punch_time_formatted,   # Use formatted time
             'Total Shift Duration': format_timedelta_to_hms(total_shift_duration),
-            'Total Break Duration': '00:00:00', # Ensure breaks are zero if not calculable
+            'Total Break Duration': format_timedelta_to_hms(total_break_duration), # Format the break duration
             'Daily_Overtime_Hours': format_timedelta_to_hms(daily_overtime_td),
             'Daily_Under_Time_Hours': format_timedelta_to_hms(daily_under_time_td),
             'is_overtime_day': is_overtime_day, # Use the calculated variable
@@ -1448,7 +1502,7 @@ def fingerprint_report_page():
                     st.success(f"✅ Successfully processed data for {len(detailed_report_df)} daily records!")
                 
                 st.subheader("📋 Detailed Report Preview")
-                st.dataframe(detailed_report_df.sample(20), use_container_width=True)
+                st.dataframe(detailed_report_df.head(), use_container_width=True)
             else:
                 st.error("❌ No valid data could be processed for the detailed report. Please check the file formats and column names.")
 
