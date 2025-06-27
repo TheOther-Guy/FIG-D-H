@@ -5,7 +5,6 @@ import calendar
 import os
 from datetime import timedelta, date
 
-
 # --- COMPANY-SPECIFIC CONFIGURATIONS ---
 # Define rules for each company.
 # Each company can have default rules, location-specific overrides, and employee-specific overrides.
@@ -97,7 +96,6 @@ COMPANY_CONFIGS = {
             "opening_hours_count" : 24 # Added for stores working 24 hours, but not directly used in attendance logic yet.
         },
         "location_rules": {
-            # Assuming "Warehouse" is a valid source_name under Second Cup from provided data
             "Warehouse": {"weekend_days": [calendar.FRIDAY], "is_rotational_off": False}
         }
     }
@@ -694,8 +692,8 @@ def calculate_shift_durations_from_uploads(uploaded_files: list, selected_compan
             'Total Break Duration': '00:00:00', # Ensure breaks are zero if not calculable
             'Daily_Overtime_Hours': format_timedelta_to_hms(daily_overtime_td),
             'Daily_Under_Time_Hours': format_timedelta_to_hms(daily_under_time_td),
-            'is_overtime_day': False, # Default to False if not explicitly set elsewhere.
-            'is_under_time_day': False, # Default to False if not explicitly set elsewhere.
+            'is_overtime_day': is_overtime_day, # Use the calculated variable
+            'is_under_time_day': is_under_time_day, # Use the calculated variable
             'Punch Status': punch_status,
         }
         return_data.update(intervals_output_dict)
