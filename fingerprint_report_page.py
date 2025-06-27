@@ -32,12 +32,12 @@ COMPANY_CONFIGS = {
             "S17": {"weekend_days": [calendar.FRIDAY], "over_time_enabled": False, "is_rotational_off": False},
             "S20": {"weekend_days": [calendar.FRIDAY], "over_time_enabled": False, "is_rotational_off": False},
             "S33": {"weekend_days": [calendar.FRIDAY], "over_time_enabled": False, "is_rotational_off": False},
-            "S14": {"weekend_days": [], "overtime_start_hours": 8, "over_time_enabled": True, "is_rotational_off": False}, # Work all week
-            "S21": {"weekend_days": [], "overtime_start_hours": 8, "over_time_enabled": True, "is_rotational_off": False}, # Work all week
-            "S39": {"weekend_days": [], "overtime_start_hours": 8, "over_time_enabled": True, "is_rotational_off": False}, # Work all week
-            "S40": {"weekend_days": [], "overtime_start_hours": 8, "over_time_enabled": True, "is_rotational_off": False}, # Work all week
-            "S41": {"weekend_days": [], "overtime_start_hours": 8, "over_time_enabled": True, "is_rotational_off": False}, # Work all week
-            "S42": {"weekend_days": [], "overtime_start_hours": 8, "over_time_enabled": True, "is_rotational_off": False}, # Work all week
+            "S14": {"weekend_days": [], "overtime_start_hours": 9, "over_time_enabled": True, "is_rotational_off": False}, # Work all week
+            "S21": {"weekend_days": [], "overtime_start_hours": 9, "over_time_enabled": True, "is_rotational_off": False}, # Work all week
+            "S39": {"weekend_days": [], "overtime_start_hours": 9, "over_time_enabled": True, "is_rotational_off": False}, # Work all week
+            "S40": {"weekend_days": [], "overtime_start_hours": 9, "over_time_enabled": True, "is_rotational_off": False}, # Work all week
+            "S41": {"weekend_days": [], "overtime_start_hours": 9, "over_time_enabled": True, "is_rotational_off": False}, # Work all week
+            "S42": {"weekend_days": [], "overtime_start_hours": 9, "over_time_enabled": True, "is_rotational_off": False}, # Work all week
         }
     },
     "D&H": {
@@ -1448,7 +1448,7 @@ def fingerprint_report_page():
                     st.success(f"✅ Successfully processed data for {len(detailed_report_df)} daily records!")
                 
                 st.subheader("📋 Detailed Report Preview")
-                st.dataframe(detailed_report_df.head(), use_container_width=True)
+                st.dataframe(detailed_report_df.sample(20), use_container_width=True)
             else:
                 st.error("❌ No valid data could be processed for the detailed report. Please check the file formats and column names.")
 
