@@ -5,6 +5,7 @@ import calendar
 import os
 from datetime import timedelta, date
 
+
 # --- COMPANY-SPECIFIC CONFIGURATIONS ---
 # Define rules for each company.
 # Each company can have default rules, location-specific overrides, and employee-specific overrides.
@@ -288,7 +289,7 @@ def process_single_fingerprint_file(uploaded_file: st.runtime.uploaded_file_mana
 
     Args:
         uploaded_file (streamlit.runtime.uploaded_file_manager.UploadedFile):
-            The uploaded file object from Streamlit.
+            Lhe uploaded file object from Streamlit.
 
     Returns:
         tuple[pd.DataFrame, bool]: A DataFrame with the processed data and a boolean
@@ -688,14 +689,13 @@ def calculate_shift_durations_from_uploads(uploaded_files: list, selected_compan
             'Source_Name': source_name, # Keep individual source name for detailed report
             'Original Number of Punches': original_punch_count,
             'Number of Cleaned Punches': cleaned_punch_count,
-            'First Punch Time': first_punch_time_formatted,
-            'Last Punch Time': last_punch_time_formatted,
+            'First Punch Time': 'N/A', 'Last Punch Time': 'N/A',
             'Total Shift Duration': format_timedelta_to_hms(total_shift_duration),
-            'Total Break Duration': format_timedelta_to_hms(total_break_duration),
+            'Total Break Duration': '00:00:00', # Ensure breaks are zero if not calculable
             'Daily_Overtime_Hours': format_timedelta_to_hms(daily_overtime_td),
             'Daily_Under_Time_Hours': format_timedelta_to_hms(daily_under_time_td),
-            'is_overtime_day': is_overtime_day, # Corrected: use the calculated boolean
-            'is_under_time_day': is_under_time_day, # Corrected: use the calculated boolean
+            'is_overtime_day': False, # Default to False if not explicitly set elsewhere.
+            'is_under_time_day': False, # Default to False if not explicitly set elsewhere.
             'Punch Status': punch_status,
         }
         return_data.update(intervals_output_dict)
@@ -748,7 +748,13 @@ def calculate_shift_durations_from_uploads(uploaded_files: list, selected_compan
     final_column_order = fixed_cols + dynamic_shift_cols + dynamic_break_cols + dynamic_general_interval_cols
     final_column_order_existing = [col for col in final_column_order if col in daily_report.columns]
 
-    final_output_df = daily_report[final_column_order_existing]
+    final_output_df = daily_report[final_column_order_existing].copy() # Ensure this is a copy to prevent SettingWithCopyWarning
+
+    # Convert duration/hours string columns back to timedelta for consistency in analysis functions
+    final_output_df['Total Shift Duration_td'] = final_output_df['Total Shift Duration'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else x)
+    final_output_df['Daily_Overtime_Hours_td'] = final_output_df['Daily_Overtime_Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else x)
+    final_output_df['Daily_Under_Time_Hours_td'] = final_output_df['Daily_Under_Time_Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else x)
+
 
     return final_output_df, error_log, global_min_date, global_max_date
 
@@ -810,11 +816,9 @@ def generate_summary_report(detailed_df: pd.DataFrame, selected_company_name: st
     if detailed_df.empty:
         return pd.DataFrame()
 
+    # The detailed_df should already have _td columns from calculate_shift_durations_from_uploads
     detailed_df['Date'] = pd.to_datetime(detailed_df['Date'])
-    detailed_df['Total Shift Duration_td'] = detailed_df['Total Shift Duration'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else x)
-    detailed_df['Daily_Overtime_Hours_td'] = detailed_df['Daily_Overtime_Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else x)
-    detailed_df['Daily_Under_Time_Hours_td'] = detailed_df['Daily_Under_Time_Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else x)
-
+    
     # Group by employee (No. and Name) for a single summary row per employee
     # Aggregate Source_Name to show all locations the employee punched at
     summary_grouped = detailed_df.groupby(['No.', 'Name']).agg(
@@ -936,11 +940,402 @@ def generate_summary_report(detailed_df: pd.DataFrame, selected_company_name: st
     return summary_df
 
 
+# --- New functions for Analysis Dashboard ---
+
+def analyze_consecutive_absences(detailed_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Analyzes detailed daily report to find consecutive absent days for each employee.
+    """
+    if detailed_df.empty:
+        return pd.DataFrame(columns=['No.', 'Name', 'Source_Names', 'Longest Consecutive Absences (Days)', 'Absence Start Date', 'Absence End Date'])
+
+    # Ensure 'Date' is datetime and sort
+    df = detailed_df.copy()
+    df['Date'] = pd.to_datetime(df['Date'])
+    df = df.sort_values(by=['No.', 'Date'])
+
+    absent_summary = []
+
+    for (emp_no, emp_name), group in df.groupby(['No.', 'Name']):
+        # Create a full date range for the employee's active period
+        min_date = group['Date'].min()
+        max_date = group['Date'].max()
+        full_date_range = pd.date_range(start=min_date, end=max_date, freq='D')
+        
+        # Mark all dates in the full range as potentially absent initially
+        attendance_series = pd.Series(False, index=full_date_range) # False means absent initially
+
+        # Mark dates where employee was present
+        present_dates = group[group['Total Shift Duration_td'] > pd.Timedelta(seconds=0)]['Date'].dt.normalize().unique()
+        attendance_series.loc[present_dates] = True # True means present
+
+        # Identify consecutive absent streaks
+        longest_streak = 0
+        current_streak = 0
+        streak_start_date = None
+        longest_streak_start_date = None
+        longest_streak_end_date = None
+
+        for current_date in attendance_series.index:
+            if not attendance_series.loc[current_date]: # If absent
+                current_streak += 1
+                if streak_start_date is None:
+                    streak_start_date = current_date
+            else: # If present, reset streak
+                if current_streak > longest_streak:
+                    longest_streak = current_streak
+                    longest_streak_start_date = streak_start_date
+                    longest_streak_end_date = current_date - timedelta(days=1)
+                current_streak = 0
+                streak_start_date = None
+        
+        # Check for streak at the very end of the period
+        if current_streak > longest_streak:
+            longest_streak = current_streak
+            longest_streak_start_date = streak_start_date
+            longest_streak_end_date = max_date # Streak extends to end of data
+
+        if longest_streak > 0:
+            absent_summary.append({
+                'No.': emp_no,
+                'Name': emp_name,
+                'Source_Names': ", ".join(group['Source_Name'].astype(str).unique()),
+                'Longest Consecutive Absences (Days)': longest_streak,
+                'Absence Start Date': longest_streak_start_date.strftime('%Y-%m-%d') if longest_streak_start_date else 'N/A',
+                'Absence End Date': longest_streak_end_date.strftime('%Y-%m-%d') if longest_streak_end_date else 'N/A'
+            })
+    return pd.DataFrame(absent_summary)
+
+
+def analyze_unusual_shift_durations(detailed_df: pd.DataFrame, selected_company_name: str) -> pd.DataFrame:
+    """
+    Analyzes detailed daily report to find shifts significantly shorter or longer than standard.
+    Flags shifts outside a configurable percentage deviation from standard.
+    """
+    if detailed_df.empty:
+        return pd.DataFrame(columns=['No.', 'Name', 'Date', 'Source_Name', 'Shift Duration', 'Standard Hours', 'Deviation (%)', 'Anomaly Type'])
+
+    df = detailed_df.copy()
+    df['Date'] = pd.to_datetime(df['Date'])
+    # Ensure this column is available from detailed_df
+    df['Shift_Duration_Hours'] = df['Total Shift Duration_td'].dt.total_seconds() / 3600.0
+
+    anomalies = []
+    
+    # Get overall company standard shift hours
+    default_standard_shift_hours = COMPANY_CONFIGS.get(selected_company_name, {}).get("default_rules", {}).get("standard_shift_hours", 8)
+
+    for index, row in df.iterrows():
+        employee_no = str(row['No.'])
+        source_name = row['Source_Name']
+        effective_rules = _get_effective_rules_for_employee_day(selected_company_name, employee_no, source_name)
+        standard_shift_hours = effective_rules.get("standard_shift_hours", default_standard_shift_hours)
+
+        shift_duration_hours = row['Shift_Duration_Hours']
+        
+        # Only consider shifts with actual duration for anomaly detection
+        if shift_duration_hours > 0:
+            deviation = ((shift_duration_hours - standard_shift_hours) / standard_shift_hours) * 100
+            
+            # Define thresholds for "unusual" deviation (e.g., +/- 25%)
+            # These can be made configurable in the Streamlit UI later if needed.
+            long_shift_threshold_pct = 25
+            short_shift_threshold_pct = -25 # Negative for shorter shifts
+
+            anomaly_type = None
+            if deviation > long_shift_threshold_pct:
+                anomaly_type = "Unusually Long Shift"
+            elif deviation < short_shift_threshold_pct:
+                anomaly_type = "Unusually Short Shift"
+            
+            if anomaly_type:
+                anomalies.append({
+                    'No.': employee_no,
+                    'Name': row['Name'],
+                    'Date': row['Date'].strftime('%Y-%m-%d'),
+                    'Source_Name': row['Source_Name'],
+                    'Shift Duration (HH:MM:SS)': row['Total Shift Duration'],
+                    'Standard Hours': standard_shift_hours,
+                    'Deviation (%)': f"{deviation:.2f}%",
+                    'Anomaly Type': anomaly_type
+                })
+    return pd.DataFrame(anomalies)
+
+
+def generate_location_summary(detailed_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Aggregates key metrics by Source_Name (Location) directly from the detailed_df.
+    """
+    if detailed_df.empty:
+        return pd.DataFrame()
+
+    df = detailed_df.copy()
+    df['Total Shift Duration_td'] = df['Total Shift Duration'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else x)
+    df['Daily_Overtime_Hours_td'] = df['Daily_Overtime_Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else x)
+    df['Daily_Under_Time_Hours_td'] = df['Daily_Under_Time_Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else x)
+
+    location_summary = df.groupby('Source_Name').agg(
+        Total_Employees=('No.', 'nunique'), # Headcount for the location
+        Total_Location_Punch_Days=('Date', 'nunique'), # Total distinct days with punches at this location
+        Total_Original_Punches=('Original Number of Punches', 'sum'), # Total raw punches recorded
+        Total_Shift_Duration_Location_TD=('Total Shift Duration_td', 'sum'),
+        Total_Overtime_Location_TD=('Daily_Overtime_Hours_td', 'sum'),
+        Total_Under_Time_Location_TD=('Daily_Under_Time_Hours_td', 'sum'),
+        Total_Single_Punch_Days_Location=('Punch Status', lambda x: (x == "Single Punch (0 Shift Duration)").sum()),
+        Total_More_Than_4_Punches_Days_Location=('Original Number of Punches', lambda x: (x > 4).sum()),
+    ).reset_index()
+
+    # Calculate rates for single and multiple punches
+    location_summary['Single_Punch_Rate_Per_100_Punches'] = location_summary.apply(
+        lambda row: (row['Total_Single_Punch_Days_Location'] / row['Total_Original_Punches']) * 100 if row['Total_Original_Punches'] > 0 else 0,
+        axis=1
+    )
+    location_summary['Multi_Punch_Rate_Per_100_Punches'] = location_summary.apply(
+        lambda row: (row['Total_More_Than_4_Punches_Days_Location'] / row['Total_Original_Punches']) * 100 if row['Total_Original_Punches'] > 0 else 0,
+        axis=1
+    )
+
+    # Format timedelta columns for display
+    location_summary['Total Shift Duration (Location)'] = location_summary['Total_Shift_Duration_Location_TD'].apply(format_timedelta_to_hms)
+    location_summary['Total Overtime Hours (Location)'] = location_summary['Total_Overtime_Location_TD'].apply(format_timedelta_to_hms)
+    location_summary['Total Under-Time Hours (Location)'] = location_summary['Total_Under_Time_Location_TD'].apply(format_timedelta_to_hms)
+
+    # Calculate Avg Shift Duration Per Employee AT THIS LOCATION
+    location_summary['Avg Shift Duration Per Employee (Location)'] = location_summary.apply(
+        lambda row: format_timedelta_to_hms(row['Total_Shift_Duration_Location_TD'] / row['Total_Location_Punch_Days']) if row['Total_Location_Punch_Days'] > 0 else '00:00:00',
+        axis=1
+    )
+
+    # Select and reorder columns for display
+    location_summary = location_summary[[
+        'Source_Name', 'Total_Employees', 'Total_Location_Punch_Days', 'Total_Original_Punches',
+        'Total Shift Duration (Location)', 'Avg Shift Duration Per Employee (Location)',
+        'Total Overtime Hours (Location)', 'Total Under-Time Hours (Location)',
+        'Total_Single_Punch_Days_Location', 'Single_Punch_Rate_Per_100_Punches',
+        'Total_More_Than_4_Punches_Days_Location', 'Multi_Punch_Rate_Per_100_Punches'
+    ]]
+    return location_summary
+
+def calculate_location_absenteeism_rates(summary_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculates absenteeism rate per location based on employee summaries.
+    Assumes each employee's 'Source_Names' first entry is their primary location.
+    """
+    if summary_df.empty:
+        return pd.DataFrame(columns=['Source_Name', 'Total_Expected_Working_Days_Location_Agg', 'Total_Absent_Days_Location_Agg', 'Absenteeism_Rate_Location'])
+
+    # Prepare a DataFrame that maps each employee to their first listed location and relevant totals
+    emp_location_data = summary_df.copy()
+    emp_location_data['Primary_Location'] = emp_location_data['Source_Names'].apply(lambda x: x.split(', ')[0] if x else 'N/A')
+
+    # Aggregate by primary location
+    location_absenteeism = emp_location_data.groupby('Primary_Location').agg(
+        Total_Expected_Working_Days_Location_Agg=('Total_Expected_Working_Days_In_Period', 'sum'),
+        Total_Absent_Days_Location_Agg=('Total_Absent_Days', 'sum')
+    ).reset_index().rename(columns={'Primary_Location': 'Source_Name'})
+
+    # Calculate absenteeism rate
+    location_absenteeism['Absenteeism_Rate_Location'] = location_absenteeism.apply(
+        lambda row: (row['Total_Absent_Days_Location_Agg'] / row['Total_Expected_Working_Days_Location_Agg']) * 100 if row['Total_Expected_Working_Days_Location_Agg'] > 0 else 0,
+        axis=1
+    )
+    return location_absenteeism[['Source_Name', 'Absenteeism_Rate_Location']]
+
+
+def calculate_top_locations_by_metric(location_overview_df: pd.DataFrame, metric_col: str, higher_is_worse: bool = True) -> str:
+    """
+    Identifies the top location for a given metric.
+    """
+    if location_overview_df.empty or metric_col not in location_overview_df.columns:
+        return "N/A"
+
+    if 'Rate' in metric_col: # Handle rates (higher is worse by default)
+        if higher_is_worse:
+            top_location_row = location_overview_df.loc[location_overview_df[metric_col].idxmax()]
+        else:
+            top_location_row = location_overview_df.loc[location_overview_df[metric_col].idxmin()]
+        
+        value = top_location_row[metric_col]
+        return f"{top_location_row['Source_Name']} ({value:.2f}%)"
+    
+    elif 'Hours' in metric_col: # Handle hours (convert to total_seconds then to hours)
+        # Ensure the column is converted to timedelta before operations
+        temp_td_series = location_overview_df[metric_col].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else pd.NaT)
+        
+        if higher_is_worse:
+            top_location_row = location_overview_df.loc[temp_td_series.dt.total_seconds().idxmax()]
+        else:
+            top_location_row = location_overview_df.loc[temp_td_series.dt.total_seconds().idxmin()]
+            
+        value_hours = pd.to_timedelta(top_location_row[metric_col]).total_seconds() / 3600
+        return f"{top_location_row['Source_Name']} ({value_hours:.1f} hours)"
+    
+    elif metric_col == 'Total_Employees':
+        top_location_row = location_overview_df.loc[location_overview_df[metric_col].idxmax()]
+        return f"{top_location_row['Source_Name']} ({int(top_location_row[metric_col])} employees)"
+
+    return "N/A"
+
+def analyze_employee_vs_location_averages(summary_df: pd.DataFrame, location_summary_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compares individual employee metrics against their primary location's averages.
+    """
+    if summary_df.empty or location_summary_df.empty:
+        return pd.DataFrame(columns=['No.', 'Name', 'Primary Location', 
+                                     'Employee Present Days', 'Location Avg Present Days', 'Present Days Deviation',
+                                     'Employee Avg Shift Duration', 'Location Avg Shift Duration', 'Avg Shift Deviation',
+                                     'Employee Total OT Hours (H)', 'Location Avg OT Hours (H)', 'OT Hours Deviation',
+                                     'Employee Total UT Hours (H)', 'Location Avg UT Hours (H)', 'UT Hours Deviation'])
+
+    comparison_data = []
+
+    # Prepare location averages for easy lookup
+    location_avg_map = {}
+    for _, loc_row in location_summary_df.iterrows():
+        # Convert string durations to timedelta for consistent comparison
+        avg_shift_td = pd.to_timedelta(loc_row['Avg Shift Duration Per Employee (Location)'])
+        total_ot_td = pd.to_timedelta(loc_row['Total Overtime Hours (Location)'])
+        total_ut_td = pd.to_timedelta(loc_row['Total Under-Time Hours (Location)'])
+
+        # Calculate average present days per employee for the location
+        loc_total_employees = loc_row['Total_Employees']
+        loc_total_present_days = loc_row['Total_Location_Punch_Days']
+        avg_present_days_loc = loc_total_present_days / loc_total_employees if loc_total_employees > 0 else 0
+
+
+        location_avg_map[loc_row['Source_Name']] = {
+            'Avg_Present_Days': avg_present_days_loc,
+            'Avg_Shift_Duration_td': avg_shift_td,
+            'Total_OT_Hours_td': total_ot_td,
+            'Total_UT_Hours_td': total_ut_td
+        }
+
+    for _, emp_row in summary_df.iterrows():
+        employee_no = emp_row['No.']
+        employee_name = emp_row['Name']
+        
+        # Use the first mentioned Source_Name as the primary location for comparison
+        primary_location = emp_row['Source_Names'].split(', ')[0] if emp_row['Source_Names'] else 'N/A'
+
+        if primary_location in location_avg_map:
+            loc_avg = location_avg_map[primary_location]
+
+            # Employee's actual values (convert durations from string back to timedelta)
+            emp_present_days = emp_row['Total_Present_Days']
+            emp_avg_shift_td = pd.to_timedelta(emp_row['Average Shift Duration'])
+            emp_total_ot_td = pd.to_timedelta(emp_row['Total Overtime Hours'])
+            emp_total_ut_td = pd.to_timedelta(emp_row['Total Under-Time Hours'])
+
+            # Calculate deviations
+            present_days_dev = emp_present_days - loc_avg['Avg_Present_Days']
+            avg_shift_dev_td = emp_avg_shift_td - loc_avg['Avg_Shift_Duration_td']
+            ot_hours_dev_td = emp_total_ot_td - loc_avg['Total_OT_Hours_td']
+            ut_hours_dev_td = emp_total_ut_td - loc_avg['Total_UT_Hours_td']
+            
+            comparison_data.append({
+                'No.': employee_no,
+                'Name': employee_name,
+                'Primary Location': primary_location,
+                'Employee Present Days': emp_present_days,
+                'Location Avg Present Days': f"{loc_avg['Avg_Present_Days']:.1f}",
+                'Present Days Deviation': f"{present_days_dev:.1f}",
+                'Employee Avg Shift Duration': format_timedelta_to_hms(emp_avg_shift_td),
+                'Location Avg Shift Duration': format_timedelta_to_hms(loc_avg['Avg_Shift_Duration_td']),
+                'Avg Shift Deviation': format_timedelta_to_hms(avg_shift_dev_td),
+                'Employee Total OT Hours (H)': round(emp_total_ot_td.total_seconds() / 3600, 1),
+                'Location Avg OT Hours (H)': round(loc_avg['Total_OT_Hours_td'].total_seconds() / 3600, 1),
+                'OT Hours Deviation': round(ot_hours_dev_td.total_seconds() / 3600, 1),
+                'Employee Total UT Hours (H)': round(emp_total_ut_td.total_seconds() / 3600, 1),
+                'Location Avg UT Hours (H)': round(loc_avg['Total_UT_Hours_td'].total_seconds() / 3600, 1),
+                'UT Hours Deviation': round(ut_hours_dev_td.total_seconds() / 3600, 1)
+            })
+        else:
+            comparison_data.append({
+                'No.': employee_no,
+                'Name': employee_name,
+                'Primary Location': primary_location,
+                'Employee Present Days': emp_row['Total_Present_Days'],
+                'Location Avg Present Days': 'N/A', 'Present Days Deviation': 'N/A',
+                'Employee Avg Shift Duration': emp_row['Average Shift Duration'],
+                'Location Avg Shift Duration': 'N/A', 'Avg Shift Deviation': 'N/A',
+                'Employee Total OT Hours (H)': round(pd.to_timedelta(emp_row['Total Overtime Hours']).total_seconds() / 3600, 1),
+                'Location Avg OT Hours (H)': 'N/A', 'OT Hours Deviation': 'N/A',
+                'Employee Total UT Hours (H)': round(pd.to_timedelta(emp_row['Total Under-Time Hours']).total_seconds() / 3600, 1),
+                'Location Avg UT Hours (H)': 'N/A', 'UT Hours Deviation': 'N/A'
+            })
+
+    return pd.DataFrame(comparison_data)
+
+
+def generate_location_recommendations(location_overview_df: pd.DataFrame, absenteeism_df: pd.DataFrame) -> dict:
+    """
+    Generates text-based recommendations for each location based on aggregated metrics.
+    """
+    recommendations = {}
+    if location_overview_df.empty:
+        return recommendations
+
+    # Merge absenteeism rates into the location_overview_df for easier access
+    merged_df = location_overview_df.merge(absenteeism_df, on='Source_Name', how='left')
+
+    # Ensure 'Absenteeism_Rate_Location' column exists before operations
+    if 'Absenteeism_Rate_Location' not in merged_df.columns:
+        merged_df['Absenteeism_Rate_Location'] = 0.0 # Default to 0.0 if column is missing
+
+    merged_df['Absenteeism_Rate_Location'] = merged_df['Absenteeism_Rate_Location'].fillna(0) # Fill NaN if no absenteeism data
+
+    # Define thresholds for generating recommendations (can be configurable)
+    ABSENTEEISM_THRESHOLD = 10  # %
+    OVERTIME_HOURS_THRESHOLD_PER_EMPLOYEE = 20 # hours per employee per period
+    UNDERTIME_HOURS_THRESHOLD_PER_EMPLOYEE = 15 # hours per employee per period
+    SINGLE_PUNCH_RATE_THRESHOLD = 5 # % of total punches
+    MULTI_PUNCH_RATE_THRESHOLD = 5 # % of total punches
+
+    for _, row in merged_df.iterrows():
+        location_name = row['Source_Name']
+        loc_recs = []
+
+        # Convert timedelta strings to seconds/hours for numerical comparison
+        total_ot_hours_loc = pd.to_timedelta(row['Total Overtime Hours (Location)']).total_seconds() / 3600
+        total_ut_hours_loc = pd.to_timedelta(row['Total Under-Time Hours (Location)']).total_seconds() / 3600
+        
+        # Calculate per-employee averages for thresholds
+        num_employees = row['Total_Employees'] if row['Total_Employees'] > 0 else 1 # Avoid division by zero
+        avg_ot_per_employee = total_ot_hours_loc / num_employees
+        avg_ut_per_employee = total_ut_hours_loc / num_employees
+
+        # Absenteeism recommendation
+        if row['Absenteeism_Rate_Location'] > ABSENTEEISM_THRESHOLD:
+            loc_recs.append(f"- High absenteeism rate ({row['Absenteeism_Rate_Location']:.1f}%). Consider reviewing attendance policies or reasons for frequent absences.")
+        
+        # Overtime recommendation
+        if avg_ot_per_employee > OVERTIME_HOURS_THRESHOLD_PER_EMPLOYEE:
+            loc_recs.append(f"- Significant overtime recorded ({avg_ot_per_employee:.1f} hrs/employee). Investigate workload distribution or staffing needs.")
+
+        # Under-time recommendation
+        if avg_ut_per_employee > UNDERTIME_HOURS_THRESHOLD_PER_EMPLOYEE:
+            loc_recs.append(f"- Notable under-time hours ({avg_ut_per_employee:.1f} hrs/employee). Look into reasons for short shifts or early departures.")
+
+        # Single punch rate recommendation
+        if row['Single_Punch_Rate_Per_100_Punches'] > SINGLE_PUNCH_RATE_THRESHOLD:
+            loc_recs.append(f"- High single punch rate ({row['Single_Punch_Rate_Per_100_Punches']:.1f}% of punches). This may indicate missed punches; review punch-in/out procedures or device reliability.")
+        
+        # Multiple punch rate recommendation
+        if row['Multi_Punch_Rate_Per_100_Punches'] > MULTI_PUNCH_RATE_THRESHOLD:
+            loc_recs.append(f"- High multiple punch rate ({row['Multi_Punch_Rate_Per_100_Punches']:.1f}% of punches). Investigate reasons for frequent entries/exits (e.g., breaks, specific tasks, system issues).")
+
+        if loc_recs:
+            recommendations[location_name] = loc_recs
+    
+    return recommendations
+
+
 # --- Streamlit page function for the Fingerprint Report Generator ---
 def fingerprint_report_page():
     """
     Displays the fingerprint report generator functionality in Streamlit.
     Allows users to upload multiple CSV/Excel files and download an Excel report.
+    Includes new tabs for detailed, summary, and analysis reports.
     """
     st.title("📊 Employee Fingerprint Report Generator")
     st.info("⬆️ Upload one or more CSV or Excel files containing employee fingerprint data.")
@@ -1045,30 +1440,181 @@ def fingerprint_report_page():
         error_log_df = st.session_state.error_log_df_cache
         download_filename = st.session_state.download_filename_cache
 
-        if not detailed_report_df.empty:
-            if st.session_state.global_min_date_cache and st.session_state.global_max_date_cache:
-                st.success(f"✅ Successfully processed data for {len(detailed_report_df)} daily records! Overall Reporting Period: {st.session_state.global_min_date_cache.strftime('%Y-%m-%d')} to {st.session_state.global_max_date_cache.strftime('%Y-%m-%d')}")
-            else:
-                st.success(f"✅ Successfully processed data for {len(detailed_report_df)} daily records!")
-            
-            st.subheader("📋 Detailed Report Preview")
-            st.dataframe(detailed_report_df.head(), use_container_width=True)
+        tab1, tab2, tab3 = st.tabs(["Detailed Report", "Summary Report", "Analysis & Insights"])
 
+        with tab1:
+            if not detailed_report_df.empty:
+                if st.session_state.global_min_date_cache and st.session_state.global_max_date_cache:
+                    st.success(f"✅ Successfully processed data for {len(detailed_report_df)} daily records! Overall Reporting Period: {st.session_state.global_min_date_cache.strftime('%Y-%m-%d')} to {st.session_state.global_max_date_cache.strftime('%Y-%m-%d')}")
+                else:
+                    st.success(f"✅ Successfully processed data for {len(detailed_report_df)} daily records!")
+                
+                st.subheader("📋 Detailed Report Preview")
+                st.dataframe(detailed_report_df.head(), use_container_width=True)
+            else:
+                st.error("❌ No valid data could be processed for the detailed report. Please check the file formats and column names.")
+
+
+        with tab2:
             if not summary_report_df.empty:
                 st.subheader("📈 Summary Report Preview")
                 st.dataframe(summary_report_df, use_container_width=True)
             else:
                 st.warning("⚠️ Summary Report could not be generated. Please ensure valid data and company configuration.")
 
-            if not error_log_df.empty:
-                st.subheader("❌ Error Log Preview")
-                st.dataframe(error_log_df, use_container_width=True)
+        with tab3:
+            st.subheader("🔍 Analysis & Insights Dashboard")
 
+            if not detailed_report_df.empty:
+                # Generate location summary and absenteeism rates
+                location_summary_df = generate_location_summary(detailed_report_df.copy())
+                location_absenteeism_df = calculate_location_absenteeism_rates(summary_report_df.copy())
+                
+                # Merge location summary with absenteeism rates for comprehensive overview
+                location_overview_for_display = location_summary_df.merge(location_absenteeism_df, on='Source_Name', how='left')
+                location_overview_for_display['Absenteeism_Rate_Location'] = location_overview_for_display['Absenteeism_Rate_Location'].fillna(0).round(1) # Fill NaN and format
+
+                st.markdown("---")
+                st.markdown("#### 🏢 Location Overviews & Headcounts")
+                if not location_overview_for_display.empty:
+                    st.info("This table summarizes key metrics and headcounts for each location, including absenteeism rates and punch behaviors.")
+                    # Reorder columns for better readability
+                    display_cols = [
+                        'Source_Name', 'Total_Employees', 'Total_Location_Punch_Days', 'Total_Original_Punches',
+                        'Absenteeism_Rate_Location',
+                        'Total Shift Duration (Location)', 'Avg Shift Duration Per Employee (Location)',
+                        'Total Overtime Hours (Location)', 'Total Under-Time Hours (Location)',
+                        'Total_Single_Punch_Days_Location', 'Single_Punch_Rate_Per_100_Punches',
+                        'Total_More_Than_4_Punches_Days_Location', 'Multi_Punch_Rate_Per_100_Punches'
+                    ]
+                    # Only include columns that actually exist in the DataFrame
+                    display_cols_existing = [col for col in display_cols if col in location_overview_for_display.columns]
+                    st.dataframe(location_overview_for_display[display_cols_existing], use_container_width=True)
+                else:
+                    st.info("No location data available for aggregation.")
+                
+                st.markdown("---")
+                st.markdown("#### 🥇 Top Locations by Metric")
+                if not location_overview_for_display.empty:
+                    col_t1, col_t2, col_t3 = st.columns(3)
+                    with col_t1:
+                        st.metric("Highest Absenteeism Rate", calculate_top_locations_by_metric(location_overview_for_display, 'Absenteeism_Rate_Location'))
+                        st.metric("Highest Total Overtime", calculate_top_locations_by_metric(location_overview_for_display, 'Total Overtime Hours (Location)'))
+                    with col_t2:
+                        st.metric("Highest Under-Time", calculate_top_locations_by_metric(location_overview_for_display, 'Total Under-Time Hours (Location)'))
+                        st.metric("Highest Single Punch Rate", calculate_top_locations_by_metric(location_overview_for_display, 'Single_Punch_Rate_Per_100_Punches'))
+                    with col_t3:
+                        st.metric("Highest Multiple Punch Rate", calculate_top_locations_by_metric(location_overview_for_display, 'Multi_Punch_Rate_Per_100_Punches'))
+                        st.metric("Highest Headcount", calculate_top_locations_by_metric(location_overview_for_display, 'Total_Employees'))
+                else:
+                    st.info("Location data is needed to identify top locations.")
+
+
+                st.markdown("---")
+                st.markdown("#### 📊 Company-Wide Averages")
+                if not summary_report_df.empty:
+                    # Calculate overall averages from the summary report
+                    avg_total_present_days = summary_report_df['Total_Present_Days'].mean()
+                    
+                    avg_total_shift_durations_seconds = summary_report_df['Total Shift Durations'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else pd.NaT).dt.total_seconds().sum()
+                    avg_total_shift_duration = avg_total_shift_durations_seconds / summary_report_df['Total_Present_Days'].sum() if summary_report_df['Total_Present_Days'].sum() > 0 else 0
+                    
+                    avg_total_overtime_hours_seconds = summary_report_df['Total Overtime Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else pd.NaT).dt.total_seconds().sum()
+                    avg_total_overtime_hours = avg_total_overtime_hours_seconds / 3600
+                    
+                    avg_total_under_time_hours_seconds = summary_report_df['Total Under-Time Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else pd.NaT).dt.total_seconds().sum()
+                    avg_total_under_time_hours = avg_total_under_time_hours_seconds / 3600
+
+                    col_c1, col_c2, col_c3 = st.columns(3)
+                    with col_c1:
+                        st.metric("Avg Present Days per Employee", f"{avg_total_present_days:.1f}")
+                    with col_c2:
+                        st.metric("Avg Shift Duration per Day", format_timedelta_to_hms(pd.Timedelta(seconds=avg_total_shift_duration)))
+                    with col_c3:
+                        st.metric("Avg Total Overtime Hours", f"{avg_total_overtime_hours:.1f} hrs")
+                        st.metric("Avg Total Under-Time Hours", f"{avg_total_under_time_hours:.1f} hrs")
+                else:
+                    st.info("Summary report data is needed to display company-wide averages.")
+
+
+                st.markdown("---")
+                st.markdown("#### 💡 Recommendations Per Location")
+                if not location_overview_for_display.empty:
+                    location_recommendations = generate_location_recommendations(location_overview_for_display.copy(), location_absenteeism_df.copy())
+                    if location_recommendations:
+                        for loc, recs in location_recommendations.items():
+                            st.markdown(f"**{loc}:**")
+                            for rec in recs:
+                                st.markdown(rec)
+                            st.markdown("") # Add a blank line for spacing
+                    else:
+                        st.info("No specific recommendations generated based on current thresholds and data.")
+                else:
+                    st.info("Location data is needed to generate recommendations.")
+
+                st.markdown("---")
+                st.markdown("#### 📊 Employee Benchmarking (Comparison to Location Averages)")
+                if not summary_report_df.empty and not location_summary_df.empty:
+                    st.info("This section compares individual employee performance metrics against the average for their primary location, helping to highlight outliers.")
+                    employee_vs_location_avg_df = analyze_employee_vs_location_averages(summary_report_df.copy(), location_summary_df.copy())
+                    st.dataframe(employee_vs_location_avg_df, use_container_width=True)
+                else:
+                    st.info("Summary and/or location data is needed to perform benchmarking analysis.")
+
+                st.markdown("---")
+                st.markdown("#### 📅 Consecutive Absence Analysis")
+                consecutive_absences_df = analyze_consecutive_absences(detailed_report_df.copy())
+                if not consecutive_absences_df.empty:
+                    st.info("This table highlights employees with the longest consecutive periods of absence within the data provided.")
+                    st.dataframe(consecutive_absences_df, use_container_width=True)
+                else:
+                    st.info("No significant consecutive absences detected or no data to analyze.")
+
+                st.markdown("---")
+                st.markdown("#### ⏳ Unusual Shift Durations (Anomalies)")
+                unusual_shifts_df = analyze_unusual_shift_durations(detailed_report_df.copy(), selected_company_name)
+                if not unusual_shifts_df.empty:
+                    st.info("This table flags individual shifts that are unusually long or short compared to the standard shift hours defined for their company/location.")
+                    st.dataframe(unusual_shifts_df, use_container_width=True)
+                else:
+                    st.info("No unusual shift durations detected outside defined thresholds.")
+                
+            else:
+                st.info("Upload and process files to see the analysis dashboard.")
+
+        # Error Log Display (moved to its own section, always available)
+        if not error_log_df.empty:
+            st.markdown("---") # Separator
+            st.subheader("❌ Error Log")
+            st.dataframe(error_log_df, use_container_width=True)
+
+        # Download button always visible if data present
+        if not detailed_report_df.empty:
             output_buffer = io.BytesIO()
             with pd.ExcelWriter(output_buffer, engine='openpyxl') as writer:
                 detailed_report_df.to_excel(writer, sheet_name='Detailed Report', index=False)
                 if not summary_report_df.empty:
                     summary_report_df.to_excel(writer, sheet_name='Summary Report', index=False)
+                
+                # Re-generate DFs for saving to Excel to ensure they are up-to-date
+                location_summary_df_for_excel = generate_location_summary(detailed_report_df.copy())
+                location_absenteeism_df_for_excel = calculate_location_absenteeism_rates(summary_report_df.copy())
+                location_overview_for_excel = location_summary_df_for_excel.merge(location_absenteeism_df_for_excel, on='Source_Name', how='left')
+                location_overview_for_excel['Absenteeism_Rate_Location'] = location_overview_for_excel['Absenteeism_Rate_Location'].fillna(0).round(1)
+
+                consecutive_absences_df = analyze_consecutive_absences(detailed_report_df.copy())
+                unusual_shifts_df = analyze_unusual_shift_durations(detailed_report_df.copy(), selected_company_name)
+                employee_vs_location_avg_df = analyze_employee_vs_location_averages(summary_report_df.copy(), location_summary_df.copy())
+
+
+                if not location_overview_for_excel.empty: # Save the combined location overview
+                    location_overview_for_excel.to_excel(writer, sheet_name='Location Overview', index=False)
+                if not consecutive_absences_df.empty:
+                    consecutive_absences_df.to_excel(writer, sheet_name='Consecutive Absences', index=False)
+                if not unusual_shifts_df.empty:
+                    unusual_shifts_df.to_excel(writer, sheet_name='Unusual Shifts', index=False)
+                if not employee_vs_location_avg_df.empty:
+                    employee_vs_location_avg_df.to_excel(writer, sheet_name='Emp vs Location Averages', index=False)
                 error_log_df.to_excel(writer, sheet_name='Error Log', index=False)
             
             st.download_button(
@@ -1079,19 +1625,16 @@ def fingerprint_report_page():
                 type="secondary"
             )
         else:
-            st.error("❌ No valid data could be processed from the uploaded files. Please check the file formats and column names.")
-            if not error_log_df.empty:
-                st.subheader("❌ Error Log")
-                st.dataframe(error_log_df, use_container_width=True)
-            
-            error_log_output_buffer = io.BytesIO()
-            with pd.ExcelWriter(error_log_output_buffer, engine='openpyxl') as writer:
-                error_log_df.to_excel(writer, sheet_name='Error Log', index=False)
-            
-            st.download_button(
-                label="📥 Download Error Log (Excel)",
-                data=error_log_output_buffer.getvalue(),
-                file_name=f"{custom_filename.strip()}_Error_Log.xlsx" if custom_filename.strip() else "Error_Log.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="secondary"
-            )
+            # If no detailed report, only offer to download the error log if it has content
+            if not error_log_df.empty and not error_log_df.iloc[0]['Error'] == 'No errors recorded during file processing.':
+                 error_log_output_buffer = io.BytesIO()
+                 with pd.ExcelWriter(error_log_output_buffer, engine='openpyxl') as writer:
+                    error_log_df.to_excel(writer, sheet_name='Error Log', index=False)
+                 
+                 st.download_button(
+                    label="📥 Download Error Log (Excel)",
+                    data=error_log_output_buffer.getvalue(),
+                    file_name=f"{custom_filename.strip()}_Error_Log.xlsx" if custom_filename.strip() else "Error_Log.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="secondary"
+                )
