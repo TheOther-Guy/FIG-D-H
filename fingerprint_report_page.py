@@ -13,9 +13,9 @@
 #     "Al-hadabah times": {
 #         "default_rules": {
 #             "standard_shift_hours": 8,
-#             "under_time_threshold_hours": 7.5, # Employee is "missing" if total shift < this
-#             "overtime_start_hours": 9,        # Overtime is calculated for hours > this
-#             "over_time_enabled": True,        # Global flag for overtime calculation for this company/location/employee
+#             "short_t_threshold_hours": 7.5, # Employee is "missing" if total shift < this
+#             "more_t_start_hours": 9,        # More_T is calculated for hours > this
+#             "more_t_enabled": True,        # Global flag for More_T calculation for this company/location/employee
 #             "is_rotational_off": False,       # Default for fixed shifts
 #             "weekend_days": [calendar.FRIDAY] # Default for Al-hadabah if no specific location rule, assuming 1 Friday
 #         },
@@ -23,39 +23,39 @@
 #             "HO": {
 #                 "weekend_days": [calendar.FRIDAY, calendar.SATURDAY], # These are potential weekend days for alternating rule
 #                 "weekend_rule_type": "alternating_f_fs", # Specific rule for alternating weekends (F then F+S)
-#                 "over_time_enabled": False,
+#                 "more_t_enabled": False,
 #                 "is_rotational_off": False
 #             },
 #             "Warehouse": {"weekend_days": [calendar.FRIDAY], "is_rotational_off": False},
-#             "lighting plus": {"weekend_days": [calendar.FRIDAY], "over_time_enabled": False, "is_rotational_off": False},
-#             "S16": {"weekend_days": [calendar.FRIDAY], "over_time_enabled": False, "is_rotational_off": False},
-#             "S17": {"weekend_days": [calendar.FRIDAY], "over_time_enabled": False, "is_rotational_off": False},
-#             "S20": {"weekend_days": [calendar.FRIDAY], "over_time_enabled": False, "is_rotational_off": False},
-#             "S33": {"weekend_days": [calendar.FRIDAY], "over_time_enabled": False, "is_rotational_off": False},
-#             "S14": {"weekend_days": [], "overtime_start_hours": 9, "over_time_enabled": True, "is_rotational_off": False}, # Work all week
-#             "S21": {"weekend_days": [], "overtime_start_hours": 9, "over_time_enabled": True, "is_rotational_off": False}, # Work all week
-#             "S39": {"weekend_days": [], "overtime_start_hours": 9, "over_time_enabled": True, "is_rotational_off": False}, # Work all week
-#             "S40": {"weekend_days": [], "overtime_start_hours": 9, "over_time_enabled": True, "is_rotational_off": False}, # Work all week
-#             "S41": {"weekend_days": [], "overtime_start_hours": 9, "over_time_enabled": True, "is_rotational_off": False}, # Work all week
-#             "S42": {"weekend_days": [], "overtime_start_hours": 9, "over_time_enabled": True, "is_rotational_off": False}, # Work all week
+#             "lighting plus": {"weekend_days": [calendar.FRIDAY], "more_t_enabled": False, "is_rotational_off": False},
+#             "S16": {"weekend_days": [calendar.FRIDAY], "more_t_enabled": False, "is_rotational_off": False},
+#             "S17": {"weekend_days": [calendar.FRIDAY], "more_t_enabled": False, "is_rotational_off": False},
+#             "S20": {"weekend_days": [calendar.FRIDAY], "more_t_enabled": False, "is_rotational_off": False},
+#             "S33": {"weekend_days": [calendar.FRIDAY], "more_t_start_hours": 8, "more_t_enabled": True, "is_rotational_off": False}, # Work all week
+#             "S14": {"weekend_days": [], "more_t_start_hours": 8, "more_t_enabled": True, "is_rotational_off": False}, # Work all week
+#             "S21": {"weekend_days": [], "more_t_start_hours": 8, "more_t_enabled": True, "is_rotational_off": False}, # Work all week
+#             "S39": {"weekend_days": [], "more_t_start_hours": 8, "more_t_enabled": True, "is_rotational_off": False}, # Work all week
+#             "S40": {"weekend_days": [], "more_t_start_hours": 8, "more_t_enabled": True, "is_rotational_off": False}, # Work all week
+#             "S41": {"weekend_days": [], "more_t_start_hours": 8, "more_t_enabled": True, "is_rotational_off": False}, # Work all week
+#             "S42": {"weekend_days": [], "more_t_start_hours": 8, "more_t_enabled": True, "is_rotational_off": False}, # Work all week
 #         }
 #     },
 #     "D&H": {
 #         "default_rules": {
 #             "standard_shift_hours": 8,
-#             "under_time_threshold_hours": 7.5,
-#             "overtime_start_hours": 9,
-#             "over_time_enabled": True,
+#             "short_t_threshold_hours": 7.5,
+#             "more_t_start_hours": 9,
+#             "more_t_enabled": True,
 #             "weekend_days": [calendar.FRIDAY], # Default for D&H
 #             "is_rotational_off": False
 #         },
 #         "employee_overrides": { # Rules specific to employee 'No.' (for Brand Managers)
-#             # These are Brand Managers who can have rotational offs and no overtime
-#             "1031": {"over_time_enabled": False, "is_rotational_off": True, "weekend_days": [], "rotational_days_off_per_week": 1}, # Ali Dagher (D&H)
-#             "12299": {"over_time_enabled": False, "is_rotational_off": True, "weekend_days": [], "rotational_days_off_per_week": 1}, # Fata (D&H)
-#             "2579": {"over_time_enabled": False, "is_rotational_off": True, "weekend_days": [], "rotational_days_off_per_week": 1},  # Aline Armani (D&H)
-#             "1494": {"over_time_enabled": False, "is_rotational_off": True, "weekend_days": [], "rotational_days_off_per_week": 1}, # Raeda (D&H)
-#             "1483": {"over_time_enabled": False, "is_rotational_off": True, "weekend_days": [], "rotational_days_off_per_week": 1}  # Mayada Abou (D&H)
+#             # These are Brand Managers who can have rotational offs and no More_T
+#             "1031": {"more_t_enabled": False, "is_rotational_off": True, "weekend_days": [], "rotational_days_off_per_week": 1}, # Ali Dagher (D&H)
+#             "12299": {"more_t_enabled": False, "is_rotational_off": True, "weekend_days": [], "rotational_days_off_per_week": 1}, # Fata (D&H)
+#             "2579": {"more_t_enabled": False, "is_rotational_off": True, "weekend_days": [], "rotational_days_off_per_week": 1},  # Aline Armani (D&H)
+#             "1494": {"more_t_enabled": False, "is_rotational_off": True, "weekend_days": [], "rotational_days_off_per_week": 1}, # Raeda (D&H)
+#             "1483": {"more_t_enabled": False, "is_rotational_off": True, "weekend_days": [], "rotational_days_off_per_week": 1}  # Mayada Abou (D&H)
 #         },
 #         "location_rules": {
 #             "HO": {"weekend_days": [calendar.FRIDAY], "is_rotational_off": False},
@@ -65,9 +65,9 @@
 #     "D&co": {
 #         "default_rules": {
 #             "standard_shift_hours": 8,
-#             "under_time_threshold_hours": 7.5,
-#             "overtime_start_hours": 9,
-#             "over_time_enabled": True,
+#             "short_t_threshold_hours": 7.5,
+#             "more_t_start_hours": 9,
+#             "more_t_enabled": True,
 #             "weekend_days": [calendar.FRIDAY], # Default for D&co
 #             "is_rotational_off": False
 #         },
@@ -88,9 +88,9 @@
 #     "Second Cup": { # Added as a top-level company based on provided data
 #         "default_rules": {
 #             "standard_shift_hours": 8,
-#             "under_time_threshold_hours": 7.5,
-#             "overtime_start_hours": 9,
-#             "over_time_enabled": True,
+#             "short_t_threshold_hours": 7.5,
+#             "more_t_start_hours": 9,
+#             "more_t_enabled": True,
 #             "weekend_days": [calendar.FRIDAY], # Based on "Only Fridays"
 #             "is_rotational_off": False,
 #             "opening_hours_count" : 24 # Added for stores working 24 hours, but not directly used in attendance logic yet.
@@ -516,7 +516,7 @@
 #         """
 #         Custom aggregation function to determine detailed shift and break durations
 #         for each employee-day group based on the number of punches, and new cleaning rules,
-#         including overtime and under-time based on dynamic rules.
+#         including More_T and Short_T based on dynamic rules.
 #         """
 #         group = group.sort_values(by='Date/Time').reset_index(drop=True)
 
@@ -525,9 +525,14 @@
 #         effective_rules = _get_effective_rules_for_employee_day(selected_company_name, employee_no, source_name)
 
 #         standard_shift_hours = effective_rules.get("standard_shift_hours", 8)
-#         under_time_threshold_hours = effective_rules.get("under_time_threshold_hours", 7.5)
-#         overtime_start_hours = effective_rules.get("overtime_start_hours", 9)
-#         over_time_enabled = effective_rules.get("over_time_enabled", True)
+#         short_t_threshold_hours = effective_rules.get("short_t_threshold_hours", 7.5)
+#         more_t_start_hours = effective_rules.get("more_t_start_hours", 9)
+#         more_t_enabled = effective_rules.get("more_t_enabled", True) # Default to True if not specified
+
+#         # --- DEBUG: Print the effective rules for this group ---
+#         st.write(f"DEBUG: Processing Employee {employee_no} at {source_name} on {group['Date'].iloc[0].strftime('%Y-%m-%d')}")
+#         st.write(f"DEBUG: Effective rules for this group - more_t_enabled: {more_t_enabled}, more_t_start_hours: {more_t_start_hours}")
+#         # --- END DEBUG ---
 
 #         if group.empty:
 #             return {
@@ -540,10 +545,10 @@
 #                 'First Punch Time': 'N/A', 'Last Punch Time': 'N/A',
 #                 'Total Shift Duration': '00:00:00',
 #                 'Total Break Duration': '00:00:00',
-#                 'Daily_Overtime_Hours': '00:00:00',
-#                 'Daily_Under_Time_Hours': '00:00:00',
-#                 'is_overtime_day': False,
-#                 'is_under_time_day': False,
+#                 'Daily_More_T_Hours': '00:00:00',
+#                 'Daily_Short_T_Hours': '00:00:00',
+#                 'is_more_t_day': False,
+#                 'is_short_t_day': False,
 #                 'Punch Status': 'No valid punches for day'
 #             }
 
@@ -694,28 +699,28 @@
 #                 punch_status = f"Total Presence ({cleaned_punch_count} Cleaned Punches, No Inferred Breaks/Unclear Patterns)"
 #                 individual_interval_details = [{'type': 'Total Presence', 'duration': total_shift_duration}]
 
-#         # Calculate Daily Overtime and Under-time and set flags
-#         daily_overtime_td = pd.Timedelta(seconds=0)
-#         daily_under_time_td = pd.Timedelta(seconds=0)
-#         is_overtime_day = False
-#         is_under_time_day = False
+#         # Calculate Daily More_T and Short_T and set flags
+#         daily_more_t_td = pd.Timedelta(seconds=0)
+#         daily_short_t_td = pd.Timedelta(seconds=0)
+#         is_more_t_day = False
+#         is_short_t_day = False
 
 #         total_shift_hours = total_shift_duration.total_seconds() / 3600.0
 
-#         if over_time_enabled:
-#             # Overtime is when actual hours exceed the overtime_start_hours
-#             if total_shift_hours > overtime_start_hours:
-#                 daily_overtime_td = pd.Timedelta(hours=total_shift_hours - overtime_start_hours)
-#                 # Mark as overtime day if there's any calculated overtime duration > 0
-#                 if daily_overtime_td > pd.Timedelta(seconds=0): # Ensures flag is true only if actual overtime exists
-#                     is_overtime_day = True
+#         if more_t_enabled:
+#             # More_T is when actual hours exceed the more_t_start_hours
+#             if total_shift_hours > more_t_start_hours:
+#                 daily_more_t_td = pd.Timedelta(hours=total_shift_hours - more_t_start_hours)
+#                 # Mark as More_T day if there's any calculated More_T duration > 0
+#                 if daily_more_t_td > pd.Timedelta(seconds=0): # Ensures flag is true only if actual More_T exists
+#                     is_more_t_day = True
         
-#         # Under-time is when actual hours are less than under_time_threshold_hours, but greater than 0
-#         if total_shift_hours < under_time_threshold_hours and total_shift_hours > 0:
-#             daily_under_time_td = pd.Timedelta(hours=under_time_threshold_hours - total_shift_hours)
-#             # Mark as under-time day if there's any calculated under-time duration > 0
-#             if daily_under_time_td > pd.Timedelta(seconds=0): # Ensures flag is true only if actual under-time exists
-#                 is_under_time_day = True
+#         # Short_T is when actual hours are less than short_t_threshold_hours, but greater than 0
+#         if total_shift_hours < short_t_threshold_hours and total_shift_hours > 0:
+#             daily_short_t_td = pd.Timedelta(hours=short_t_threshold_hours - total_shift_hours)
+#             # Mark as Short_T day if there's any calculated Short_T duration > 0
+#             if daily_short_t_td > pd.Timedelta(seconds=0): # Ensures flag is true only if actual Short_T exists
+#                 is_short_t_day = True
 
 #         intervals_output_dict = {}
 #         shift_col_count = 0
@@ -744,10 +749,10 @@
 #             'Last Punch Time': last_punch_time_formatted,   # Use formatted time
 #             'Total Shift Duration': format_timedelta_to_hms(total_shift_duration),
 #             'Total Break Duration': format_timedelta_to_hms(total_break_duration), # Format the break duration
-#             'Daily_Overtime_Hours': format_timedelta_to_hms(daily_overtime_td),
-#             'Daily_Under_Time_Hours': format_timedelta_to_hms(daily_under_time_td),
-#             'is_overtime_day': is_overtime_day, # Use the calculated variable
-#             'is_under_time_day': is_under_time_day, # Use the calculated variable
+#             'Daily_More_T_Hours': format_timedelta_to_hms(daily_more_t_td),
+#             'Daily_Short_T_Hours': format_timedelta_to_hms(daily_short_t_td),
+#             'is_more_t_day': is_more_t_day, # Use the calculated variable
+#             'is_short_t_day': is_short_t_day, # Use the calculated variable
 #             'Punch Status': punch_status,
 #         }
 #         return_data.update(intervals_output_dict)
@@ -776,7 +781,7 @@
 #     for col in daily_report.columns:
 #         if 'Duration' in col or 'Hours' in col:
 #             daily_report[col] = daily_report[col].fillna('00:00:00')
-#         elif 'is_overtime_day' in col or 'is_under_time_day' in col: # Fill boolean NaNs with False
+#         elif 'is_more_t_day' in col or 'is_short_t_day' in col: # Fill boolean NaNs with False
 #              daily_report[col] = daily_report[col].fillna(False)
 
 #     # Define the desired fixed column order
@@ -784,8 +789,8 @@
 #                   'Original Number of Punches', 'Number of Cleaned Punches',
 #                   'First Punch Time', 'Last Punch Time',
 #                   'Total Shift Duration', 'Total Break Duration',
-#                   'Daily_Overtime_Hours', 'Daily_Under_Time_Hours',
-#                   'is_overtime_day', 'is_under_time_day', # Add new daily flags here
+#                   'Daily_More_T_Hours', 'Daily_Short_T_Hours',
+#                   'is_more_t_day', 'is_short_t_day', # Add new daily flags here
 #                   'Punch Status']
 
 #     all_columns = daily_report.columns.tolist()
@@ -804,8 +809,8 @@
 
 #     # Convert duration/hours string columns back to timedelta for consistency in analysis functions
 #     final_output_df['Total Shift Duration_td'] = final_output_df['Total Shift Duration'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else x)
-#     final_output_df['Daily_Overtime_Hours_td'] = final_output_df['Daily_Overtime_Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else x)
-#     final_output_df['Daily_Under_Time_Hours_td'] = final_output_df['Daily_Under_Time_Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else x)
+#     final_output_df['Daily_More_T_Hours_td'] = final_output_df['Daily_More_T_Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else x)
+#     final_output_df['Daily_Short_T_Hours_td'] = final_output_df['Daily_Short_T_Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else x)
 
 
 #     return final_output_df, error_log, global_min_date, global_max_date
@@ -878,13 +883,13 @@
 #         Source_Names=('Source_Name', lambda x: ", ".join(x.astype(str).unique())),
 #         Total_Present_Days=('Date', lambda x: x[detailed_df.loc[x.index, 'Total Shift Duration_td'] > pd.Timedelta(seconds=0)].nunique()),
 #         Total_Shift_Durations_td=('Total Shift Duration_td', 'sum'),
-#         Total_Overtime_Hours_td=('Daily_Overtime_Hours_td', 'sum'),
-#         Total_Under_Time_Hours_td=('Daily_Under_Time_Hours_td', 'sum'),
+#         Total_More_T_Hours_td=('Daily_More_T_Hours_td', 'sum'),
+#         Total_Short_T_Hours_td=('Daily_Short_T_Hours_td', 'sum'),
 #         Count_Single_Punch_Days=('Punch Status', lambda x: (x == "Single Punch (0 Shift Duration)").sum()),
 #         Count_More_Than_4_Punches_Days=('Original Number of Punches', lambda x: (x > 4).sum()),
-#         # New: Count of days with overtime and under-time
-#         Count_Overtime_Days=('is_overtime_day', 'sum'),
-#         Count_Under_Time_Days=('is_under_time_day', 'sum'),
+#         # New: Count of days with More_T and Short_T
+#         Count_More_T_Days=('is_more_t_day', 'sum'),
+#         Count_Short_T_Days=('is_short_t_day', 'sum'),
 #         # Employee-specific punch date range
 #         Employee_Punch_Start_Date=('Date', 'min'),
 #         Employee_Punch_End_Date=('Date', 'max')
@@ -965,8 +970,8 @@
 
 #     # Format final Timedelta columns back to HH:MM:SS string
 #     summary_grouped['Total Shift Durations'] = summary_grouped['Total_Shift_Durations_td'].apply(format_timedelta_to_hms)
-#     summary_grouped['Total Overtime Hours'] = summary_grouped['Total_Overtime_Hours_td'].apply(format_timedelta_to_hms)
-#     summary_grouped['Total Under-Time Hours'] = summary_grouped['Total_Under_Time_Hours_td'].apply(format_timedelta_to_hms)
+#     summary_grouped['Total More_T Hours'] = summary_grouped['Total_More_T_Hours_td'].apply(format_timedelta_to_hms)
+#     summary_grouped['Total Short_T Hours'] = summary_grouped['Total_Short_T_Hours_td'].apply(format_timedelta_to_hms)
 
 #     # Format the new date columns
 #     summary_grouped['Employee Punch Start Date'] = summary_grouped['Employee_Punch_Start_Date'].dt.strftime('%Y-%m-%d')
@@ -983,8 +988,8 @@
 #         'Total_Employee_Period_OFFs', # Added new column here
 #         'Total_Present_Days', 'Total_Absent_Days',
 #         'Total Shift Durations', 'Average Shift Duration', # Added new column
-#         'Total Overtime Hours', 'Total Under-Time Hours',
-#         'Count_Overtime_Days', 'Count_Under_Time_Days', # New count columns
+#         'Total More_T Hours', 'Total Short_T Hours',
+#         'Count_More_T_Days', 'Count_Short_T_Days', # New count columns
 #         'Count_Single_Punch_Days', 'Count_More_Than_4_Punches_Days'
 #     ]
 #     summary_df = summary_grouped[summary_report_cols]
@@ -1123,16 +1128,16 @@
 
 #     df = detailed_df.copy()
 #     df['Total Shift Duration_td'] = df['Total Shift Duration'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else x)
-#     df['Daily_Overtime_Hours_td'] = df['Daily_Overtime_Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else x)
-#     df['Daily_Under_Time_Hours_td'] = df['Daily_Under_Time_Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else x)
+#     df['Daily_More_T_Hours_td'] = df['Daily_More_T_Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else x)
+#     df['Daily_Short_T_Hours_td'] = df['Daily_Short_T_Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else x)
 
 #     location_summary = df.groupby('Source_Name').agg(
 #         Total_Employees=('No.', 'nunique'), # Headcount for the location
 #         Total_Location_Punch_Days=('Date', 'nunique'), # Total distinct days with punches at this location
 #         Total_Original_Punches=('Original Number of Punches', 'sum'), # Total raw punches recorded
 #         Total_Shift_Duration_Location_TD=('Total Shift Duration_td', 'sum'),
-#         Total_Overtime_Location_TD=('Daily_Overtime_Hours_td', 'sum'),
-#         Total_Under_Time_Location_TD=('Daily_Under_Time_Hours_td', 'sum'),
+#         Total_More_T_Location_TD=('Daily_More_T_Hours_td', 'sum'),
+#         Total_Short_T_Location_TD=('Daily_Short_T_Hours_td', 'sum'),
 #         Total_Single_Punch_Days_Location=('Punch Status', lambda x: (x == "Single Punch (0 Shift Duration)").sum()),
 #         Total_More_Than_4_Punches_Days_Location=('Original Number of Punches', lambda x: (x > 4).sum()),
 #     ).reset_index()
@@ -1149,8 +1154,8 @@
 
 #     # Format timedelta columns for display
 #     location_summary['Total Shift Duration (Location)'] = location_summary['Total_Shift_Duration_Location_TD'].apply(format_timedelta_to_hms)
-#     location_summary['Total Overtime Hours (Location)'] = location_summary['Total_Overtime_Location_TD'].apply(format_timedelta_to_hms)
-#     location_summary['Total Under-Time Hours (Location)'] = location_summary['Total_Under_Time_Location_TD'].apply(format_timedelta_to_hms)
+#     location_summary['Total More_T Hours (Location)'] = location_summary['Total_More_T_Location_TD'].apply(format_timedelta_to_hms)
+#     location_summary['Total Short_T Hours (Location)'] = location_summary['Total_Short_T_Location_TD'].apply(format_timedelta_to_hms)
 
 #     # Calculate Avg Shift Duration Per Employee AT THIS LOCATION
 #     location_summary['Avg Shift Duration Per Employee (Location)'] = location_summary.apply(
@@ -1162,7 +1167,7 @@
 #     location_summary = location_summary[[
 #         'Source_Name', 'Total_Employees', 'Total_Location_Punch_Days', 'Total_Original_Punches',
 #         'Total Shift Duration (Location)', 'Avg Shift Duration Per Employee (Location)',
-#         'Total Overtime Hours (Location)', 'Total Under-Time Hours (Location)',
+#         'Total More_T Hours (Location)', 'Total Short_T Hours (Location)',
 #         'Total_Single_Punch_Days_Location', 'Single_Punch_Rate_Per_100_Punches',
 #         'Total_More_Than_4_Punches_Days_Location', 'Multi_Punch_Rate_Per_100_Punches'
 #     ]]
@@ -1236,8 +1241,8 @@
 #         return pd.DataFrame(columns=['No.', 'Name', 'Primary Location', 
 #                                      'Employee Present Days', 'Location Avg Present Days', 'Present Days Deviation',
 #                                      'Employee Avg Shift Duration', 'Location Avg Shift Duration', 'Avg Shift Deviation',
-#                                      'Employee Total OT Hours (H)', 'Location Avg OT Hours (H)', 'OT Hours Deviation',
-#                                      'Employee Total UT Hours (H)', 'Location Avg UT Hours (H)', 'UT Hours Deviation'])
+#                                      'Employee Total More_T Hours (H)', 'Location Avg More_T Hours (H)', 'More_T Hours Deviation',
+#                                      'Employee Total Short_T Hours (H)', 'Location Avg Short_T Hours (H)', 'Short_T Hours Deviation'])
 
 #     comparison_data = []
 
@@ -1246,8 +1251,8 @@
 #     for _, loc_row in location_summary_df.iterrows():
 #         # Convert string durations to timedelta for consistent comparison
 #         avg_shift_td = pd.to_timedelta(loc_row['Avg Shift Duration Per Employee (Location)'])
-#         total_ot_td = pd.to_timedelta(loc_row['Total Overtime Hours (Location)'])
-#         total_ut_td = pd.to_timedelta(loc_row['Total Under-Time Hours (Location)'])
+#         total_more_t_td = pd.to_timedelta(loc_row['Total More_T Hours (Location)'])
+#         total_short_t_td = pd.to_timedelta(loc_row['Total Short_T Hours (Location)'])
 
 #         # Calculate average present days per employee for the location
 #         loc_total_employees = loc_row['Total_Employees']
@@ -1258,8 +1263,8 @@
 #         location_avg_map[loc_row['Source_Name']] = {
 #             'Avg_Present_Days': avg_present_days_loc,
 #             'Avg_Shift_Duration_td': avg_shift_td,
-#             'Total_OT_Hours_td': total_ot_td,
-#             'Total_UT_Hours_td': total_ut_td
+#             'Total_More_T_Hours_td': total_more_t_td,
+#             'Total_Short_T_Hours_td': total_short_t_td
 #         }
 
 #     for _, emp_row in summary_df.iterrows():
@@ -1275,14 +1280,14 @@
 #             # Employee's actual values (convert durations from string back to timedelta)
 #             emp_present_days = emp_row['Total_Present_Days']
 #             emp_avg_shift_td = pd.to_timedelta(emp_row['Average Shift Duration'])
-#             emp_total_ot_td = pd.to_timedelta(emp_row['Total Overtime Hours'])
-#             emp_total_ut_td = pd.to_timedelta(emp_row['Total Under-Time Hours'])
+#             emp_total_more_t_td = pd.to_timedelta(emp_row['Total More_T Hours'])
+#             emp_total_short_t_td = pd.to_timedelta(emp_row['Total Short_T Hours'])
 
 #             # Calculate deviations
 #             present_days_dev = emp_present_days - loc_avg['Avg_Present_Days']
 #             avg_shift_dev_td = emp_avg_shift_td - loc_avg['Avg_Shift_Duration_td']
-#             ot_hours_dev_td = emp_total_ot_td - loc_avg['Total_OT_Hours_td']
-#             ut_hours_dev_td = emp_total_ut_td - loc_avg['Total_UT_Hours_td']
+#             more_t_hours_dev_td = emp_total_more_t_td - loc_avg['Total_More_T_Hours_td']
+#             short_t_hours_dev_td = emp_total_short_t_td - loc_avg['Total_Short_T_Hours_td']
             
 #             comparison_data.append({
 #                 'No.': employee_no,
@@ -1294,12 +1299,12 @@
 #                 'Employee Avg Shift Duration': format_timedelta_to_hms(emp_avg_shift_td),
 #                 'Location Avg Shift Duration': format_timedelta_to_hms(loc_avg['Avg_Shift_Duration_td']),
 #                 'Avg Shift Deviation': format_timedelta_to_hms(avg_shift_dev_td),
-#                 'Employee Total OT Hours (H)': round(emp_total_ot_td.total_seconds() / 3600, 1),
-#                 'Location Avg OT Hours (H)': round(loc_avg['Total_OT_Hours_td'].total_seconds() / 3600, 1),
-#                 'OT Hours Deviation': round(ot_hours_dev_td.total_seconds() / 3600, 1),
-#                 'Employee Total UT Hours (H)': round(emp_total_ut_td.total_seconds() / 3600, 1),
-#                 'Location Avg UT Hours (H)': round(loc_avg['Total_UT_Hours_td'].total_seconds() / 3600, 1),
-#                 'UT Hours Deviation': round(ut_hours_dev_td.total_seconds() / 3600, 1)
+#                 'Employee Total More_T Hours (H)': round(emp_total_more_t_td.total_seconds() / 3600, 1),
+#                 'Location Avg More_T Hours (H)': round(loc_avg['Total_More_T_Hours_td'].total_seconds() / 3600, 1),
+#                 'More_T Hours Deviation': round(more_t_hours_dev_td.total_seconds() / 3600, 1),
+#                 'Employee Total Short_T Hours (H)': round(emp_total_short_t_td.total_seconds() / 3600, 1),
+#                 'Location Avg Short_T Hours (H)': round(loc_avg['Total_Short_T_Hours_td'].total_seconds() / 3600, 1),
+#                 'Short_T Hours Deviation': round(short_t_hours_dev_td.total_seconds() / 3600, 1)
 #             })
 #         else:
 #             comparison_data.append({
@@ -1310,10 +1315,10 @@
 #                 'Location Avg Present Days': 'N/A', 'Present Days Deviation': 'N/A',
 #                 'Employee Avg Shift Duration': emp_row['Average Shift Duration'],
 #                 'Location Avg Shift Duration': 'N/A', 'Avg Shift Deviation': 'N/A',
-#                 'Employee Total OT Hours (H)': round(pd.to_timedelta(emp_row['Total Overtime Hours']).total_seconds() / 3600, 1),
-#                 'Location Avg OT Hours (H)': 'N/A', 'OT Hours Deviation': 'N/A',
-#                 'Employee Total UT Hours (H)': round(pd.to_timedelta(emp_row['Total Under-Time Hours']).total_seconds() / 3600, 1),
-#                 'Location Avg UT Hours (H)': 'N/A', 'UT Hours Deviation': 'N/A'
+#                 'Employee Total More_T Hours (H)': round(pd.to_timedelta(emp_row['Total More_T Hours']).total_seconds() / 3600, 1),
+#                 'Location Avg More_T Hours (H)': 'N/A', 'More_T Hours Deviation': 'N/A',
+#                 'Employee Total Short_T Hours (H)': round(pd.to_timedelta(emp_row['Total Short_T Hours']).total_seconds() / 3600, 1),
+#                 'Location Avg Short_T Hours (H)': 'N/A', 'Short_T Hours Deviation': 'N/A'
 #             })
 
 #     return pd.DataFrame(comparison_data)
@@ -1338,8 +1343,8 @@
 
 #     # Define thresholds for generating recommendations (can be configurable)
 #     ABSENTEEISM_THRESHOLD = 10  # %
-#     OVERTIME_HOURS_THRESHOLD_PER_EMPLOYEE = 20 # hours per employee per period
-#     UNDERTIME_HOURS_THRESHOLD_PER_EMPLOYEE = 15 # hours per employee per period
+#     MORE_T_HOURS_THRESHOLD_PER_EMPLOYEE = 20 # hours per employee per period
+#     SHORT_T_HOURS_THRESHOLD_PER_EMPLOYEE = 15 # hours per employee per period
 #     SINGLE_PUNCH_RATE_THRESHOLD = 5 # % of total punches
 #     MULTI_PUNCH_RATE_THRESHOLD = 5 # % of total punches
 
@@ -1348,25 +1353,25 @@
 #         loc_recs = []
 
 #         # Convert timedelta strings to seconds/hours for numerical comparison
-#         total_ot_hours_loc = pd.to_timedelta(row['Total Overtime Hours (Location)']).total_seconds() / 3600
-#         total_ut_hours_loc = pd.to_timedelta(row['Total Under-Time Hours (Location)']).total_seconds() / 3600
+#         total_more_t_hours_loc = pd.to_timedelta(row['Total More_T Hours (Location)']).total_seconds() / 3600
+#         total_short_t_hours_loc = pd.to_timedelta(row['Total Short_T Hours (Location)']).total_seconds() / 3600
         
 #         # Calculate per-employee averages for thresholds
 #         num_employees = row['Total_Employees'] if row['Total_Employees'] > 0 else 1 # Avoid division by zero
-#         avg_ot_per_employee = total_ot_hours_loc / num_employees
-#         avg_ut_per_employee = total_ut_hours_loc / num_employees
+#         avg_more_t_per_employee = total_more_t_hours_loc / num_employees
+#         avg_short_t_per_employee = total_short_t_hours_loc / num_employees
 
 #         # Absenteeism recommendation
 #         if row['Absenteeism_Rate_Location'] > ABSENTEEISM_THRESHOLD:
 #             loc_recs.append(f"- High absenteeism rate ({row['Absenteeism_Rate_Location']:.1f}%). Consider reviewing attendance policies or reasons for frequent absences.")
         
-#         # Overtime recommendation
-#         if avg_ot_per_employee > OVERTIME_HOURS_THRESHOLD_PER_EMPLOYEE:
-#             loc_recs.append(f"- Significant overtime recorded ({avg_ot_per_employee:.1f} hrs/employee). Investigate workload distribution or staffing needs.")
+#         # More_T recommendation
+#         if avg_more_t_per_employee > MORE_T_HOURS_THRESHOLD_PER_EMPLOYEE:
+#             loc_recs.append(f"- Significant More_T recorded ({avg_more_t_per_employee:.1f} hrs/employee). Investigate workload distribution or staffing needs.")
 
-#         # Under-time recommendation
-#         if avg_ut_per_employee > UNDERTIME_HOURS_THRESHOLD_PER_EMPLOYEE:
-#             loc_recs.append(f"- Notable under-time hours ({avg_ut_per_employee:.1f} hrs/employee). Look into reasons for short shifts or early departures.")
+#         # Short_T recommendation
+#         if avg_short_t_per_employee > SHORT_T_HOURS_THRESHOLD_PER_EMPLOYEE:
+#             loc_recs.append(f"- Notable Short_T hours ({avg_short_t_per_employee:.1f} hrs/employee). Look into reasons for short shifts or early departures.")
 
 #         # Single punch rate recommendation
 #         if row['Single_Punch_Rate_Per_100_Punches'] > SINGLE_PUNCH_RATE_THRESHOLD:
@@ -1535,7 +1540,7 @@
 #                         'Source_Name', 'Total_Employees', 'Total_Location_Punch_Days', 'Total_Original_Punches',
 #                         'Absenteeism_Rate_Location',
 #                         'Total Shift Duration (Location)', 'Avg Shift Duration Per Employee (Location)',
-#                         'Total Overtime Hours (Location)', 'Total Under-Time Hours (Location)',
+#                         'Total More_T Hours (Location)', 'Total Short_T Hours (Location)',
 #                         'Total_Single_Punch_Days_Location', 'Single_Punch_Rate_Per_100_Punches',
 #                         'Total_More_Than_4_Punches_Days_Location', 'Multi_Punch_Rate_Per_100_Punches'
 #                     ]
@@ -1551,9 +1556,9 @@
 #                     col_t1, col_t2, col_t3 = st.columns(3)
 #                     with col_t1:
 #                         st.metric("Highest Absenteeism Rate", calculate_top_locations_by_metric(location_overview_for_display, 'Absenteeism_Rate_Location'))
-#                         st.metric("Highest Total Overtime", calculate_top_locations_by_metric(location_overview_for_display, 'Total Overtime Hours (Location)'))
+#                         st.metric("Highest Total More_T", calculate_top_locations_by_metric(location_overview_for_display, 'Total More_T Hours (Location)'))
 #                     with col_t2:
-#                         st.metric("Highest Under-Time", calculate_top_locations_by_metric(location_overview_for_display, 'Total Under-Time Hours (Location)'))
+#                         st.metric("Highest Short_T", calculate_top_locations_by_metric(location_overview_for_display, 'Total Short_T Hours (Location)'))
 #                         st.metric("Highest Single Punch Rate", calculate_top_locations_by_metric(location_overview_for_display, 'Single_Punch_Rate_Per_100_Punches'))
 #                     with col_t3:
 #                         st.metric("Highest Multiple Punch Rate", calculate_top_locations_by_metric(location_overview_for_display, 'Multi_Punch_Rate_Per_100_Punches'))
@@ -1571,11 +1576,11 @@
 #                     avg_total_shift_durations_seconds = summary_report_df['Total Shift Durations'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else pd.NaT).dt.total_seconds().sum()
 #                     avg_total_shift_duration = avg_total_shift_durations_seconds / summary_report_df['Total_Present_Days'].sum() if summary_report_df['Total_Present_Days'].sum() > 0 else 0
                     
-#                     avg_total_overtime_hours_seconds = summary_report_df['Total Overtime Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else pd.NaT).dt.total_seconds().sum()
-#                     avg_total_overtime_hours = avg_total_overtime_hours_seconds / 3600
+#                     avg_total_more_t_hours_seconds = summary_report_df['Total More_T Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else pd.NaT).dt.total_seconds().sum()
+#                     avg_total_more_t_hours = avg_total_more_t_hours_seconds / 3600
                     
-#                     avg_total_under_time_hours_seconds = summary_report_df['Total Under-Time Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else pd.NaT).dt.total_seconds().sum()
-#                     avg_total_under_time_hours = avg_total_under_time_hours_seconds / 3600
+#                     avg_total_short_t_hours_seconds = summary_report_df['Total Short_T Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else pd.NaT).dt.total_seconds().sum()
+#                     avg_total_short_t_hours = avg_total_short_t_hours_seconds / 3600
 
 #                     col_c1, col_c2, col_c3 = st.columns(3)
 #                     with col_c1:
@@ -1583,8 +1588,8 @@
 #                     with col_c2:
 #                         st.metric("Avg Shift Duration per Day", format_timedelta_to_hms(pd.Timedelta(seconds=avg_total_shift_duration)))
 #                     with col_c3:
-#                         st.metric("Avg Total Overtime Hours", f"{avg_total_overtime_hours:.1f} hrs")
-#                         st.metric("Avg Total Under-Time Hours", f"{avg_total_under_time_hours:.1f} hrs")
+#                         st.metric("Avg Total More_T Hours", f"{avg_total_more_t_hours:.1f} hrs")
+#                         st.metric("Avg Total Short_T Hours", f"{avg_total_short_t_hours:.1f} hrs")
 #                 else:
 #                     st.info("Summary report data is needed to display company-wide averages.")
 
@@ -1692,6 +1697,7 @@
 #                 )
 
 
+#######################
 
 import streamlit as st
 import pandas as pd
@@ -2598,7 +2604,9 @@ def generate_summary_report(detailed_df: pd.DataFrame, selected_company_name: st
     summary_grouped['Total Days in Overall Period'] = (global_end_date - global_start_date).days + 1 # New column
     
     summary_grouped['Total_Expected_Working_Days_In_Period'] = 0 # Initialize for calculation
-    summary_grouped['Total_Absent_Days'] = 0 # Initialize for calculation
+    # --- UPDATED LOGIC: Calculate Total_Absent_Days as days without punches within the overall period ---
+    summary_grouped['Total_Absent_Days'] = 0
+    # --- END UPDATED LOGIC ---
     summary_grouped['Total_Expected_Weekends_In_Period'] = 0.0 # New: Initialize for expected weekends (float)
     summary_grouped['Total_Employee_Period_OFFs'] = 0.0 # New: Initialize for employee's allowed offs
     summary_grouped['Average Shift Duration'] = '00:00:00' # New: Initialize for average shift duration
@@ -2620,8 +2628,9 @@ def generate_summary_report(detailed_df: pd.DataFrame, selected_company_name: st
         # Round for display in 'Total_Expected_Working_Days_In_Period'
         summary_grouped.loc[index, 'Total_Expected_Working_Days_In_Period'] = int(round(expected_working_days_exact))
 
-        # Calculate Absent Days based on rounded expected working days
-        summary_grouped.loc[index, 'Total_Absent_Days'] = max(0, summary_grouped.loc[index, 'Total_Expected_Working_Days_In_Period'] - row['Total_Present_Days'])
+        # --- UPDATED LOGIC: Calculate Absent Days as total days in period minus present days ---
+        summary_grouped.loc[index, 'Total_Absent_Days'] = summary_grouped.loc[index, 'Total Days in Overall Period'] - row['Total_Present_Days']
+        # --- END UPDATED LOGIC ---
 
         # Calculate Expected Weekends (float) based on total days minus exact working days from rules
         expected_weekends_from_rules = total_days_in_global_period_float - expected_working_days_exact
@@ -2694,12 +2703,16 @@ def generate_summary_report(detailed_df: pd.DataFrame, selected_company_name: st
 
 # --- New functions for Analysis Dashboard ---
 
-def analyze_consecutive_absences(detailed_df: pd.DataFrame) -> pd.DataFrame:
+def analyze_consecutive_absences(detailed_df: pd.DataFrame, summary_df: pd.DataFrame, global_start_date: date, global_end_date: date) -> pd.DataFrame:
     """
     Analyzes detailed daily report to find consecutive absent days for each employee.
+    Includes the total absent days from the summary report, and now, ALL absent dates.
+    Now uses global_start_date and global_end_date for a consistent period.
     """
-    if detailed_df.empty:
-        return pd.DataFrame(columns=['No.', 'Name', 'Source_Names', 'Longest Consecutive Absences (Days)', 'Absence Start Date', 'Absence End Date'])
+    if detailed_df.empty or summary_df.empty or global_start_date is None or global_end_date is None:
+        return pd.DataFrame(columns=['No.', 'Name', 'Source_Names', 
+                                     'Longest Consecutive Absences (Days)', 'Absence Start Date', 'Absence End Date', 
+                                     'Total Absent Days', 'All Absent Dates']) 
 
     # Ensure 'Date' is datetime and sort
     df = detailed_df.copy()
@@ -2708,26 +2721,36 @@ def analyze_consecutive_absences(detailed_df: pd.DataFrame) -> pd.DataFrame:
 
     absent_summary = []
 
+    # Merge summary_df to get Total_Absent_Days
+    summary_df['No.'] = summary_df['No.'].astype(str)
+    summary_for_merge = summary_df[['No.', 'Total_Absent_Days']].copy()
+
     for (emp_no, emp_name), group in df.groupby(['No.', 'Name']):
-        # Create a full date range for the employee's active period
-        min_date = group['Date'].min()
-        max_date = group['Date'].max()
-        full_date_range = pd.date_range(start=min_date, end=max_date, freq='D')
+        # Create a full date range for the employee based on the GLOBAL data period
+        full_date_range = pd.date_range(start=global_start_date, end=global_end_date, freq='D')
         
-        # Mark all dates in the full range as potentially absent initially
+        # Initialize attendance series for the global range
         attendance_series = pd.Series(False, index=full_date_range) # False means absent initially
 
-        # Mark dates where employee was present
+        # Mark dates where employee was present in the detailed_df
+        # Use .dt.normalize() to ensure comparison is just on the date part
         present_dates = group[group['Total Shift Duration_td'] > pd.Timedelta(seconds=0)]['Date'].dt.normalize().unique()
-        attendance_series.loc[present_dates] = True # True means present
+        
+        # Ensure present_dates are within the full_date_range index before assigning
+        present_dates_in_range = [d for d in present_dates if d in attendance_series.index]
+        attendance_series.loc[present_dates_in_range] = True # True means present
 
-        # Identify consecutive absent streaks
+        # Identify all absent dates within the global range
+        all_absent_dates_list = [d.strftime('%Y-%m-%d') for d in attendance_series.index if not attendance_series.loc[d]]
+        formatted_all_absent_dates = ", ".join(all_absent_dates_list)
+
+        # Identify longest consecutive absent streak within the global range
         longest_streak = 0
         current_streak = 0
         streak_start_date = None
         longest_streak_start_date = None
         longest_streak_end_date = None
-
+        
         for current_date in attendance_series.index:
             if not attendance_series.loc[current_date]: # If absent
                 current_streak += 1
@@ -2741,20 +2764,26 @@ def analyze_consecutive_absences(detailed_df: pd.DataFrame) -> pd.DataFrame:
                 current_streak = 0
                 streak_start_date = None
         
-        # Check for streak at the very end of the period
+        # Check for streak at the very end of the global period
         if current_streak > longest_streak:
             longest_streak = current_streak
             longest_streak_start_date = streak_start_date
-            longest_streak_end_date = max_date # Streak extends to end of data
+            longest_streak_end_date = global_end_date # Streak extends to end of global data
 
-        if longest_streak > 0:
+        # Only add to summary if there's any absence or presence record for the employee in the overall period
+        # (avoid adding employees who are completely absent from the data if not desired, though Total_Absent_Days should handle this)
+        if longest_streak > 0 or len(all_absent_dates_list) > 0: 
+            total_absent_days_for_employee = summary_for_merge[summary_for_merge['No.'] == str(emp_no)]['Total_Absent_Days'].iloc[0] if not summary_for_merge[summary_for_merge['No.'] == str(emp_no)].empty else 0
+            
             absent_summary.append({
                 'No.': emp_no,
                 'Name': emp_name,
                 'Source_Names': ", ".join(group['Source_Name'].astype(str).unique()),
                 'Longest Consecutive Absences (Days)': longest_streak,
                 'Absence Start Date': longest_streak_start_date.strftime('%Y-%m-%d') if longest_streak_start_date else 'N/A',
-                'Absence End Date': longest_streak_end_date.strftime('%Y-%m-%d') if longest_streak_end_date else 'N/A'
+                'Absence End Date': longest_streak_end_date.strftime('%Y-%m-%d') if longest_streak_end_date else 'N/A',
+                'Total Absent Days': total_absent_days_for_employee,
+                'All Absent Dates': formatted_all_absent_dates # Now consistently covers the global period
             })
     return pd.DataFrame(absent_summary)
 
@@ -2872,9 +2901,11 @@ def calculate_location_absenteeism_rates(summary_df: pd.DataFrame) -> pd.DataFra
     """
     Calculates absenteeism rate per location based on employee summaries.
     Assumes each employee's 'Source_Names' first entry is their primary location.
+    The rate is now based on 'Total Days in Overall Period' (all days in the period),
+    not just expected working days, as 'Absent Days' is now defined as days without punches.
     """
     if summary_df.empty:
-        return pd.DataFrame(columns=['Source_Name', 'Total_Expected_Working_Days_Location_Agg', 'Total_Absent_Days_Location_Agg', 'Absenteeism_Rate_Location'])
+        return pd.DataFrame(columns=['Source_Name', 'Total_Period_Days_Location_Agg', 'Total_Absent_Days_Location_Agg', 'Absenteeism_Rate_Location'])
 
     # Prepare a DataFrame that maps each employee to their first listed location and relevant totals
     emp_location_data = summary_df.copy()
@@ -2882,15 +2913,16 @@ def calculate_location_absenteeism_rates(summary_df: pd.DataFrame) -> pd.DataFra
 
     # Aggregate by primary location
     location_absenteeism = emp_location_data.groupby('Primary_Location').agg(
-        Total_Expected_Working_Days_Location_Agg=('Total_Expected_Working_Days_In_Period', 'sum'),
+        Total_Period_Days_Location_Agg=('Total Days in Overall Period', 'sum'), # Aggregating total days in period
         Total_Absent_Days_Location_Agg=('Total_Absent_Days', 'sum')
     ).reset_index().rename(columns={'Primary_Location': 'Source_Name'})
 
-    # Calculate absenteeism rate
+    # Calculate absenteeism rate based on total days in period
     location_absenteeism['Absenteeism_Rate_Location'] = location_absenteeism.apply(
-        lambda row: (row['Total_Absent_Days_Location_Agg'] / row['Total_Expected_Working_Days_Location_Agg']) * 100 if row['Total_Expected_Working_Days_Location_Agg'] > 0 else 0,
+        lambda row: (row['Total_Absent_Days_Location_Agg'] / row['Total_Period_Days_Location_Agg']) * 100 if row['Total_Period_Days_Location_Agg'] > 0 else 0,
         axis=1
     )
+    # Removing 'Total_Period_Days_Location_Agg' from final output if not desired for display
     return location_absenteeism[['Source_Name', 'Absenteeism_Rate_Location']]
 
 
@@ -2998,8 +3030,7 @@ def analyze_employee_vs_location_averages(summary_df: pd.DataFrame, location_sum
                 'Location Avg More_T Hours (H)': round(loc_avg['Total_More_T_Hours_td'].total_seconds() / 3600, 1),
                 'More_T Hours Deviation': round(more_t_hours_dev_td.total_seconds() / 3600, 1),
                 'Employee Total Short_T Hours (H)': round(emp_total_short_t_td.total_seconds() / 3600, 1),
-                'Location Avg Short_T Hours (H)': round(loc_avg['Total_Short_T_Hours_td'].total_seconds() / 3600, 1),
-                'Short_T Hours Deviation': round(short_t_hours_dev_td.total_seconds() / 3600, 1)
+                'Location Avg Short_T Hours (H)': 'N/A', 'Short_T Hours Deviation': 'N/A'
             })
         else:
             comparison_data.append({
@@ -3315,7 +3346,8 @@ def fingerprint_report_page():
 
                 st.markdown("---")
                 st.markdown("#### 📅 Consecutive Absence Analysis")
-                consecutive_absences_df = analyze_consecutive_absences(detailed_report_df.copy())
+                # Pass summary_report_df to analyze_consecutive_absences
+                consecutive_absences_df = analyze_consecutive_absences(detailed_report_df.copy(), summary_report_df.copy(), st.session_state.global_min_date_cache, st.session_state.global_max_date_cache)
                 if not consecutive_absences_df.empty:
                     st.info("This table highlights employees with the longest consecutive periods of absence within the data provided.")
                     st.dataframe(consecutive_absences_df, use_container_width=True)
@@ -3354,7 +3386,7 @@ def fingerprint_report_page():
                 location_overview_for_excel = location_summary_df_for_excel.merge(location_absenteeism_df_for_excel, on='Source_Name', how='left')
                 location_overview_for_excel['Absenteeism_Rate_Location'] = location_overview_for_excel['Absenteeism_Rate_Location'].fillna(0).round(1)
 
-                consecutive_absences_df = analyze_consecutive_absences(detailed_report_df.copy())
+                consecutive_absences_df = analyze_consecutive_absences(detailed_report_df.copy(), summary_report_df.copy(), st.session_state.global_min_date_cache, st.session_state.global_max_date_cache) 
                 unusual_shifts_df = analyze_unusual_shift_durations(detailed_report_df.copy(), selected_company_name)
                 employee_vs_location_avg_df = analyze_employee_vs_location_averages(summary_report_df.copy(), location_summary_df.copy())
 
