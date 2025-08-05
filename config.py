@@ -224,6 +224,7 @@ FILE_DATE_FORMATS = {
     "D&H Warehouse": '%d/%m/%Y %I:%M:%S %p',
     "Designer Avenue": '%m/%d/%Y %I:%M:%S %p',
     "Etam 360": '%d/%m/%Y %I:%M:%S %p',
+    "Etam 360 Vm": '%d/%m/%Y %I:%M:%S %p',
     "Etam Avenue": '%d/%m/%Y %I:%M:%S %p',
     "Etam Gatemall": '%d/%m/%Y %I:%M:%S %p',
     "Etam Marina": '%m/%d/%Y %I:%M:%S %p',
