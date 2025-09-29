@@ -135,7 +135,7 @@ def calculate_24_hour_shifts(emp_group_full_sorted: pd.DataFrame, emp_no: str, s
     Calculates shift durations for 24-hour locations (e.g., specific Second Cup stores)
     based on C/In and C/Out pairings. This logic allows shifts to span multiple calendar days.
     It conditionally removes an initial C/Out punch if it falls between 2 AM and 7 AM.
-    Crucially, it now enforces a maximum shift duration of 14 hours.
+    Crucially, it now enforces a maximum shift duration of 20 hours.
 
     Args:
         emp_group_full_sorted (pd.DataFrame): DataFrame containing all punches for a single employee, sorted by time.
@@ -149,11 +149,11 @@ def calculate_24_hour_shifts(emp_group_full_sorted: pd.DataFrame, emp_no: str, s
     records = emp_group_full_sorted.to_dict('records')
     
     # Define the time window for ignoring initial C/Out punches
-    ignore_start_time = time(2, 0, 0) # 2 AM
+    ignore_start_time = time(1, 0, 0) # 2 AM
     ignore_end_time = time(7, 0, 0)   # 7 AM
 
     # Define maximum allowed shift duration for 24-hour locations
-    MAX_SHIFT_DURATION = timedelta(hours=14)
+    MAX_SHIFT_DURATION = timedelta(hours=20)
 
     # Conditional removal of the first C/Out punch for 24-hour locations
     # Only remove if it's a C/Out AND its time falls within the 2 AM to 7 AM window
