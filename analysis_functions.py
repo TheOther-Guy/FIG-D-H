@@ -472,3 +472,35 @@ def generate_location_recommendations(location_overview_df: pd.DataFrame, absent
             recommendations[location_name] = loc_recs
     
     return recommendations
+
+
+def fix_uniform_status_daywise(emp_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    If an employee's punches for a day are all one type (e.g., all 'C/Out'),
+    alternate them *within that day* in chronological order:
+        day’s 1st → 'C/In', 2nd → 'C/Out', 3rd → 'C/In', ...
+    Adds 'Status_Autofixed' flag when applied to any row for that day.
+
+    This avoids cross-day index drift that can flip days into Out→In and
+    cause durations to appear as breaks.
+    """
+    required = {'Original_DateTime', 'Status', 'Date'}
+    if emp_df.empty or not required.issubset(emp_df.columns):
+        return emp_df
+
+    df = emp_df.sort_values('Original_DateTime').copy()
+    df['Status_Autofixed'] = df.get('Status_Autofixed', False)
+
+    def _fix_one_day(day_df: pd.DataFrame) -> pd.DataFrame:
+        statuses = day_df['Status'].astype(str).str.upper()
+        if len(statuses.unique()) == 1:
+            # all the same → alternate In/Out within the day
+            fixed = ['C/In' if i % 2 == 0 else 'C/Out' for i in range(len(day_df))]
+            day_df = day_df.copy()
+            day_df['Status'] = fixed
+            day_df['Status_Autofixed'] = True
+        return day_df
+
+    df = df.groupby('Date', group_keys=False).apply(_fix_one_day)
+    return df
+

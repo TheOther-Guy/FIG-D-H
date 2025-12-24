@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import io
 from datetime import date
+from pending_offs import load_pending_offs_from_vacation, apply_pending_offs
+
 
 # Import classes and functions from other modules
 from data_processing import FingerprintProcessor # Updated import to second_cup_processor
@@ -16,6 +18,9 @@ from analysis_functions import (
     generate_location_recommendations
 )
 from config import COMPANY_CONFIGS, format_timedelta_to_hms # Added format_timedelta_to_hms import
+
+# >>> NEW: vacation adjustments
+from vacation_adjustment import load_vacation_file, apply_vacation_adjustments
 
 class AppUI:
     """
@@ -43,6 +48,10 @@ class AppUI:
             st.session_state.global_max_date_cache = None
         if 'debug_mode' not in st.session_state:
             st.session_state.debug_mode = False
+        if 'adjusted_kpi_df_cache' not in st.session_state:
+            st.session_state.adjusted_kpi_df_cache = pd.DataFrame()
+        if 'blocking_error' not in st.session_state:
+            st.session_state.blocking_error = None
 
     def display_main_page(self):
         """Displays the main Streamlit page for the fingerprint report generator."""
@@ -61,6 +70,13 @@ class AppUI:
             type=["csv", "xls", "xlsx"],
             accept_multiple_files=True,
             key=f"fingerprint_file_uploader_{st.session_state.uploader_key_counter}"
+        )
+
+        # >>> NEW uploader appears just below the fingerprint uploader
+        vacation_file = st.file_uploader(
+            "Optional: Upload Vacation/Sick/Emergency Adjustments (single company)",
+            type=["csv", "xls", "xlsx"],
+            key="vacation_file_uploader"
         )
 
         default_filename = "Employee_Punch_Reports"
@@ -83,11 +99,21 @@ class AppUI:
         st.session_state.debug_mode = st.checkbox("Enable Debug Mode (for diagnostics)", value=st.session_state.debug_mode)
 
         if generate_button and uploaded_files:
-            self._process_and_cache_reports(uploaded_files, selected_company_name, custom_filename)
+            self._process_and_cache_reports(uploaded_files, selected_company_name, custom_filename, vacation_file)
             st.rerun()
         elif uploaded_files is None and not st.session_state.processed_data_present:
             st.info("Please upload your fingerprint files to start the report generation.")
         
+        # Display blocking errors if any (persistent across reruns)
+        if st.session_state.get('blocking_error'):
+            st.error(f"🛑 **Blocking Error: Date Range Exceeded**\n\n{st.session_state.blocking_error}")
+            st.info(
+                "**Action Required:**\n"
+                "1. Check if the file format matches `config.py`.\n"
+                "2. Update `config.py` with the correct date format for this location if needed.\n"
+                "3. Or fix the date format in the file itself and re-upload."
+            )
+
         if st.session_state.processed_data_present:
             self._display_reports(selected_company_name)
             self._display_download_button()
@@ -96,56 +122,209 @@ class AppUI:
         """Resets all relevant session state variables to clear the app."""
         st.session_state.uploader_key_counter += 1
         st.session_state.processed_data_present = False
+
+        # Core data caches
         st.session_state.detailed_report_df_cache = pd.DataFrame()
         st.session_state.summary_report_df_cache = pd.DataFrame()
+        st.session_state.adjusted_kpi_df_cache = pd.DataFrame()
+        # NEW: cache for aggregated Pending OFF credits
+        st.session_state.pending_offs_df_cache = pd.DataFrame()
+        st.session_state.blocking_error = None # Clear blocking error on reset
+
+        # Meta / helper caches
         st.session_state.error_log_df_cache = pd.DataFrame()
         st.session_state.download_filename_cache = "Employee_Punch_Reports.xlsx"
         st.session_state.global_min_date_cache = None
         st.session_state.global_max_date_cache = None
 
-    def _process_and_cache_reports(self, uploaded_files: list, selected_company_name: str, custom_filename: str):
+
+    def _process_and_cache_reports(
+        self,
+        uploaded_files: list,
+        selected_company_name: str,
+        custom_filename: str,
+        vacation_file
+    ):
         """
         Processes uploaded files, generates reports, and caches them in session state.
+
+        This is the main orchestration layer:
+        - Builds detailed daily report from fingerprint files
+        - Builds baseline summary from detailed report
+        - Optionally applies HR vacation overrides (HR_Override sheet)
+        - Optionally applies Pending OFF credits (Pending Off sheet)
+        - Caches everything in st.session_state for later display / export
         """
+        import pandas as pd
+        from io import BytesIO
+        from data_processing import FingerprintProcessor
+        from report_generation import ReportGenerator
+        from vacation_adjustment import load_vacation_file, apply_vacation_adjustments
+
+        # Mark that we have started processing
         st.session_state.processed_data_present = True
+        st.session_state.blocking_error = None # Clear previous errors
+
+
         with st.spinner("Processing files and generating reports... This may take a moment."):
+            # ------------------------------------------------------------------
+            # 1) Process raw fingerprint files -> combined_df
+            # ------------------------------------------------------------------
             processor = FingerprintProcessor(selected_company_name)
-            combined_df = processor.process_uploaded_files(uploaded_files)
-            
+            try:
+                combined_df = processor.process_uploaded_files(uploaded_files)
+            except processor.DateRangeError as dre:
+                # Store error in session state to survive rerun
+                st.session_state.blocking_error = str(dre)
+                
+                # STOP PROCESSING: Clear state and return
+                st.session_state.processed_data_present = False
+                st.session_state.detailed_report_df_cache = pd.DataFrame()
+                st.session_state.summary_report_df_cache = pd.DataFrame()
+                return
+
+            # ------------------------------------------------------------------
+            # 2) Build the detailed (daily) report
+            # ------------------------------------------------------------------
             detailed_report_df = processor.calculate_daily_reports(combined_df)
             error_log = processor.get_error_log()
             global_min_date, global_max_date = processor.get_global_dates()
 
+            # Cache detailed + date window for use in UI
             st.session_state.detailed_report_df_cache = detailed_report_df
             st.session_state.global_min_date_cache = global_min_date
             st.session_state.global_max_date_cache = global_max_date
 
+            # ------------------------------------------------------------------
+            # 3) Build the base summary (no HR overrides / pending offs yet)
+            # ------------------------------------------------------------------
             if global_min_date and global_max_date and not detailed_report_df.empty:
                 report_generator = ReportGenerator(selected_company_name)
-                st.session_state.summary_report_df_cache = report_generator.generate_summary_report(
-                    detailed_report_df.copy(), 
-                    global_min_date,      
+                base_summary = report_generator.generate_summary_report(
+                    detailed_report_df.copy(),
+                    global_min_date,
                     global_max_date
                 )
-            else:
-                st.session_state.summary_report_df_cache = pd.DataFrame()
 
+                # Optional baseline debug
+                if st.session_state.get("debug_mode", False):
+                    st.info("DEBUG: Generated baseline summary (before vacations / pending offs).")
+                    st.write("Baseline summary shape:", base_summary.shape)
+
+                # ------------------------------------------------------------------
+                # 4) Optional: apply HR overrides / vacations (HR_Override sheet)
+                # ------------------------------------------------------------------
+                final_summary = base_summary.copy()
+                adjusted_detail = pd.DataFrame()
+                pending_offs_detail = pd.DataFrame()
+
+                if vacation_file is not None:
+                    try:
+                        overrides_df = load_vacation_file(vacation_file)
+
+                        if st.session_state.get("debug_mode", False):
+                            st.info("DEBUG: Loaded HR_Override sheet from vacation file.")
+                            st.write("HR overrides rows:", len(overrides_df))
+
+                        # apply_vacation_adjustments returns:
+                        #   - summary with Final_Absent_Days / Final_Absent_Dates
+                        #   - per-type detail (Adjusted Absences (Per Type))
+                        adjusted_summary, adjusted_detail = apply_vacation_adjustments(
+                            base_summary.copy(),
+                            overrides_df,
+                            selected_company_name,
+                            global_min_date,
+                            global_max_date,
+                            detailed_df=detailed_report_df  # pass detailed DF so Absent_Dates can be recomputed
+                        )
+
+                        final_summary = adjusted_summary
+
+                    except Exception as e:
+                        # If vacation parsing fails, fall back gracefully to base summary
+                        st.error(f"Error while applying vacation adjustments: {e}")
+                        if st.session_state.get("debug_mode", False):
+                            st.exception(e)
+                        adjusted_detail = pd.DataFrame()
+                        final_summary = base_summary.copy()
+
+                    # ------------------------------------------------------------------
+                    # 5) Optional: apply Pending OFF credits (Pending Off sheet)
+                    # ------------------------------------------------------------------
+                    try:
+                        pending_offs_df = load_pending_offs_from_vacation(vacation_file)
+
+                        if st.session_state.get("debug_mode", False):
+                            st.info("DEBUG: Loaded Pending Off sheet from vacation file.")
+                            st.write("Pending OFF rows:", len(pending_offs_df))
+
+                        if pending_offs_df is not None and not pending_offs_df.empty:
+                            # apply_pending_offs uses Final_Absent_Days if present,
+                            # otherwise falls back to Total_Absent_Days.
+                            final_summary, pending_offs_detail = apply_pending_offs(
+                                final_summary,
+                                pending_offs_df
+                            )
+
+                            if st.session_state.get("debug_mode", False):
+                                st.info("DEBUG: Applied pending OFF credits.")
+                                st.write("Final summary (after pending offs) shape:", final_summary.shape)
+                        else:
+                            # Ensure we still have the expected columns in summary
+                            final_summary, pending_offs_detail = apply_pending_offs(final_summary, None)
+
+                    except Exception as e:
+                        # If Pending Off parsing fails, we still keep the vacation-adjusted summary
+                        st.error(f"Error while applying pending OFF credits: {e}")
+                        if st.session_state.get("debug_mode", False):
+                            st.exception(e)
+                        # Fallback: assume no pending offs, but ensure columns exist
+                        final_summary, pending_offs_detail = apply_pending_offs(final_summary, None)
+
+                # ------------------------------------------------------------------
+                # 6) Cache final summary & adjustment detail
+                # ------------------------------------------------------------------
+                st.session_state.summary_report_df_cache = final_summary
+                st.session_state.adjusted_kpi_df_cache = adjusted_detail
+                st.session_state.pending_offs_df_cache = pending_offs_detail
+
+            else:
+                # If we cannot determine a valid date window or no detailed rows,
+                # we still want the UI to render gracefully.
+                st.session_state.summary_report_df_cache = pd.DataFrame()
+                st.session_state.adjusted_kpi_df_cache = pd.DataFrame()
+                st.session_state.pending_offs_df_cache = pd.DataFrame()
+
+            # ----------------------------------------------------------------------
+            # 7) Cache error log (always)
+            # ----------------------------------------------------------------------
             error_log_df_for_cache = pd.DataFrame(error_log)
             if error_log_df_for_cache.empty:
-                error_log_df_for_cache = pd.DataFrame([{'Filename': 'N/A', 'Error': 'No errors recorded during file processing.'}])
+                error_log_df_for_cache = pd.DataFrame(
+                    [{'Filename': 'N/A', 'Error': 'No errors recorded during file processing.'}]
+                )
             st.session_state.error_log_df_cache = error_log_df_for_cache
-            
-            st.session_state.download_filename_cache = f"{custom_filename.strip()}.xlsx" if custom_filename.strip() else "Employee_Punch_Reports.xlsx"
+
+            # ----------------------------------------------------------------------
+            # 8) Cache the desired export filename
+            # ----------------------------------------------------------------------
+            if isinstance(custom_filename, str) and custom_filename.strip():
+                st.session_state.download_filename_cache = f"{custom_filename.strip()}.xlsx"
+            else:
+                st.session_state.download_filename_cache = "Employee_Punch_Reports.xlsx"
+
+
 
     def _display_reports(self, selected_company_name: str):
         """Displays the generated reports in tabs."""
         detailed_report_df = st.session_state.detailed_report_df_cache
         summary_report_df = st.session_state.summary_report_df_cache
+        adjusted_kpi_df = st.session_state.adjusted_kpi_df_cache
         error_log_df = st.session_state.error_log_df_cache
         global_min_date = st.session_state.global_min_date_cache
         global_max_date = st.session_state.global_max_date_cache
 
-        tab1, tab2, tab3 = st.tabs(["Detailed Report", "Summary Report", "Analysis & Insights"])
+        tab1, tab2, tab3, tab4 = st.tabs(["Detailed Report", "Summary Report", "Analysis & Insights", "Vacation Adjustments"])
 
         with tab1:
             if not detailed_report_df.empty:
@@ -180,170 +359,33 @@ class AppUI:
                 st.markdown("#### 🏢 Location Overviews & Headcounts")
                 if not location_overview_for_display.empty:
                     st.info("This table summarizes key metrics and headcounts for each location, including absenteeism rates and punch behaviors.")
-                    display_cols = [
-                        'Source_Name', 'Total_Employees', 'Total_Location_Punch_Days', 'Total_Original_Punches',
-                        'Absenteeism_Rate_Location',
-                        'Total Shift Duration (Location)', 'Avg Shift Duration Per Employee (Location)',
-                        'Total More_T Hours (Location)', 'Total Short_T Hours (Location)',
-                        'Total_Single_Punch_Days_Location', 'Single_Punch_Rate_Per_100_Punches',
-                        'Total_More_Than_4_Punches_Days_Location', 'Multi_Punch_Rate_Per_100_Punches'
-                    ]
-                    display_cols_existing = [col for col in display_cols if col in location_overview_for_display.columns]
-                    st.dataframe(location_overview_for_display[display_cols_existing], use_container_width=True)
+                    st.dataframe(location_overview_for_display, use_container_width=True)
                 else:
-                    st.info("No location data available for aggregation.")
-                
-                st.markdown("---")
-                st.markdown("#### 🥇 Top Locations by Metric")
-                if not location_overview_for_display.empty:
-                    col_t1, col_t2, col_t3 = st.columns(3)
-                    with col_t1:
-                        st.metric("Highest Absenteeism Rate", calculate_top_locations_by_metric(location_overview_for_display, 'Absenteeism_Rate_Location'))
-                        st.metric("Highest Total More_T", calculate_top_locations_by_metric(location_overview_for_display, 'Total More_T Hours (Location)'))
-                    with col_t2:
-                        st.metric("Highest Short_T", calculate_top_locations_by_metric(location_overview_for_display, 'Total Short_T Hours (Location)'))
-                        st.metric("Highest Single Punch Rate", calculate_top_locations_by_metric(location_overview_for_display, 'Single_Punch_Rate_Per_100_Punches'))
-                    with col_t3:
-                        st.metric("Highest Multiple Punch Rate", calculate_top_locations_by_metric(location_overview_for_display, 'Multi_Punch_Rate_Per_100_Punches'))
-                        st.metric("Highest Headcount", calculate_top_locations_by_metric(location_overview_for_display, 'Total_Employees'))
-                else:
-                    st.info("Location data is needed to identify top locations.")
+                    st.warning("No location data available for analysis.")
 
-
-                st.markdown("---")
-                st.markdown("#### 📊 Company-Wide Averages")
-                if not summary_report_df.empty:
-                    avg_total_present_days = summary_report_df['Total_Present_Days'].mean()
-                    
-                    avg_total_shift_durations_seconds = summary_report_df['Total Shift Durations'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else pd.NaT).dt.total_seconds().sum()
-                    avg_total_shift_duration = avg_total_shift_durations_seconds / summary_report_df['Total_Present_Days'].sum() if summary_report_df['Total_Present_Days'].sum() > 0 else 0
-                    
-                    avg_total_more_t_hours_seconds = summary_report_df['Total More_T Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else pd.NaT).dt.total_seconds().sum()
-                    avg_total_more_t_hours = avg_total_more_t_hours_seconds / 3600
-                    
-                    avg_total_short_t_hours_seconds = summary_report_df['Total Short_T Hours'].apply(lambda x: pd.to_timedelta(x) if isinstance(x, str) else pd.NaT).dt.total_seconds().sum()
-                    avg_total_short_t_hours = avg_total_short_t_hours_seconds / 3600
-
-                    col_c1, col_c2, col_c3 = st.columns(3)
-                    with col_c1:
-                        st.metric("Avg Present Days per Employee", f"{avg_total_present_days:.1f}")
-                    with col_c2:
-                        st.metric("Avg Shift Duration per Day", format_timedelta_to_hms(pd.Timedelta(seconds=avg_total_shift_duration)))
-                    with col_c3:
-                        st.metric("Avg Total More_T Hours", f"{avg_total_more_t_hours:.1f} hrs")
-                        st.metric("Avg Total Short_T Hours", f"{avg_total_short_t_hours:.1f} hrs")
-                else:
-                    st.info("Summary report data is needed to display company-wide averages.")
-
-
-                st.markdown("---")
-                st.markdown("#### 💡 Recommendations Per Location")
-                if not location_overview_for_display.empty:
-                    location_recommendations = generate_location_recommendations(location_overview_for_display.copy(), location_absenteeism_df.copy())
-                    if location_recommendations:
-                        for loc, recs in location_recommendations.items():
-                            st.markdown(f"**{loc}:**")
-                            for rec in recs:
-                                st.markdown(rec)
-                            st.markdown("")
-                    else:
-                        st.info("No specific recommendations generated based on current thresholds and data.")
-                else:
-                    st.info("Location data is needed to generate recommendations.")
-
-                st.markdown("---")
-                st.markdown("#### 📊 Employee Benchmarking (Comparison to Location Averages)")
-                if not summary_report_df.empty and not location_summary_df.empty:
-                    st.info("This section compares individual employee performance metrics against the average for their primary location, helping to highlight outliers.")
-                    employee_vs_location_avg_df = analyze_employee_vs_location_averages(summary_report_df.copy(), location_summary_df.copy())
-                    st.dataframe(employee_vs_location_avg_df, use_container_width=True)
-                else:
-                    st.info("Summary and/or location data is needed to perform benchmarking analysis.")
-
-                st.markdown("---")
-                st.markdown("#### 📅 Consecutive Absence Analysis")
-                consecutive_absences_df = analyze_consecutive_absences(detailed_report_df.copy(), summary_report_df.copy(), global_min_date, global_max_date)
-                if not consecutive_absences_df.empty:
-                    st.info("This table highlights employees with the longest consecutive periods of absence within the data provided.")
-                    st.dataframe(consecutive_absences_df, use_container_width=True)
-                else:
-                    st.info("No significant consecutive absences detected or no data to analyze.")
-
-                st.markdown("---")
-                st.markdown("#### ⏳ Unusual Shift Durations (Anomalies)")
-                unusual_shifts_df = analyze_unusual_shift_durations(detailed_report_df.copy(), selected_company_name)
-                if not unusual_shifts_df.empty:
-                    st.info("This table flags individual shifts that are unusually long or short compared to the standard shift hours defined for their company/location.")
-                    st.dataframe(unusual_shifts_df, use_container_width=True)
-                else:
-                    st.info("No unusual shift durations detected outside defined thresholds.")
-                
+        with tab4:
+            st.subheader("🧾 Vacation & Absence Adjustments")
+            if not adjusted_kpi_df.empty:
+                st.dataframe(adjusted_kpi_df, use_container_width=True)
             else:
-                st.info("Upload and process files to see the analysis dashboard.")
-
-        if not error_log_df.empty:
-            st.markdown("---")
-            st.subheader("❌ Error Log")
-            st.dataframe(error_log_df, use_container_width=True)
+                st.info("No vacation or adjustment file uploaded.")
 
     def _display_download_button(self):
-        """Displays the download button for the generated Excel report."""
-        detailed_report_df = st.session_state.detailed_report_df_cache
-        summary_report_df = st.session_state.summary_report_df_cache
-        error_log_df = st.session_state.error_log_df_cache
-        download_filename = st.session_state.download_filename_cache
-        selected_company_name = st.session_state.company_selection
-        global_min_date = st.session_state.global_min_date_cache
-        global_max_date = st.session_state.global_max_date_cache
-
-
-        if not detailed_report_df.empty:
-            output_buffer = io.BytesIO()
-            with pd.ExcelWriter(output_buffer, engine='openpyxl') as writer:
-                detailed_report_df.to_excel(writer, sheet_name='Detailed Report', index=False)
-                if not summary_report_df.empty:
-                    summary_report_df.to_excel(writer, sheet_name='Summary Report', index=False)
-                
-                # Re-generate DFs for saving to Excel to ensure they are up-to-date
-                location_summary_df_for_excel = generate_location_summary(detailed_report_df.copy())
-                location_absenteeism_df_for_excel = calculate_location_absenteeism_rates(summary_report_df.copy())
-                location_overview_for_excel = location_summary_df_for_excel.merge(location_absenteeism_df_for_excel, on='Source_Name', how='left')
-                location_overview_for_excel['Absenteeism_Rate_Location'] = location_overview_for_excel['Absenteeism_Rate_Location'].fillna(0).round(1)
-
-                consecutive_absences_df = analyze_consecutive_absences(detailed_report_df.copy(), summary_report_df.copy(), global_min_date, global_max_date) 
-                unusual_shifts_df = analyze_unusual_shift_durations(detailed_report_df.copy(), selected_company_name)
-                # Define location_summary_df before using it
-                location_summary_df = generate_location_summary(detailed_report_df.copy()) # Re-generate location_summary_df
-                employee_vs_location_avg_df = analyze_employee_vs_location_averages(summary_report_df.copy(), location_summary_df.copy())
-
-
-                if not location_overview_for_excel.empty:
-                    location_overview_for_excel.to_excel(writer, sheet_name='Location Overview', index=False)
-                if not consecutive_absences_df.empty:
-                    consecutive_absences_df.to_excel(writer, sheet_name='Consecutive Absences', index=False)
-                if not unusual_shifts_df.empty:
-                    unusual_shifts_df.to_excel(writer, sheet_name='Unusual Shifts', index=False)
-                if not employee_vs_location_avg_df.empty:
-                    employee_vs_location_avg_df.to_excel(writer, sheet_name='Emp vs Location Averages', index=False)
-                error_log_df.to_excel(writer, sheet_name='Error Log', index=False)
-            
-            st.download_button(
-                label="📥 Download All Reports (Excel)",
-                data=output_buffer.getvalue(),
-                file_name=download_filename,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="secondary"
+        """Displays download button for Excel report."""
+        if not st.session_state.summary_report_df_cache.empty:
+            from io import BytesIO
+            output = BytesIO()
+            report_generator = ReportGenerator("Export")
+            report_generator.export_to_excel(
+                st.session_state.detailed_report_df_cache,
+                st.session_state.summary_report_df_cache,
+                st.session_state.adjusted_kpi_df_cache,
+                st.session_state.download_filename_cache,
+                output
             )
-        else:
-            if not error_log_df.empty and not error_log_df.iloc[0]['Error'] == 'No errors recorded during file processing.':
-                 error_log_output_buffer = io.BytesIO()
-                 with pd.ExcelWriter(error_log_output_buffer, engine='openpyxl') as writer:
-                    error_log_df.to_excel(writer, sheet_name='Error Log', index=False)
-                 
-                 st.download_button(
-                    label="📥 Download Error Log (Excel)",
-                    data=error_log_output_buffer.getvalue(),
-                    file_name=f"{st.session_state.report_filename_input.strip()}_Error_Log.xlsx" if st.session_state.report_filename_input.strip() else "Error_Log.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    type="secondary"
-                )
+            st.download_button(
+                label="💾 Download Full Report",
+                data=output.getvalue(),
+                file_name=st.session_state.download_filename_cache,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )

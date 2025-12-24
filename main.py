@@ -44,6 +44,12 @@ def main():
                 st.session_state.page = 'sku_generator'
             if st.button("⏰ Fingerprint Reports", use_container_width=True, key="nav_fingerprint"):
                 st.session_state.page = 'fingerprint_reports'
+
+            if st.button("🔍 Diagnostics", use_container_width=True, key="nav_diagnostics"):
+                st.session_state.page = 'diagnostics'
+                from diagnostics import run_employee_diagnostics
+                run_employee_diagnostics()
+
             
             st.markdown("---") # Separator for logout button
             if st.button("🚪 Logout", use_container_width=True, key="logout_button"):
