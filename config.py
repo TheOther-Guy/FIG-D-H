@@ -274,6 +274,7 @@ FILE_DATE_FORMATS = {
     "BM FD Boulevard": '%d/%m/%y %I:%M:%S %p',
     "Bm Ws sharq": '%m/%d/%Y %I:%M:%S %p',
     "DCO HO": '%m/%d/%Y %I:%M:%S %p',
+    "Yammay Al koutmall": '%m/%d/%Y %I:%M:%S %p',
 
 
     # alhadaba
@@ -349,6 +350,7 @@ FILE_DATE_FORMATS = {
     "LVER Mohalab": '%d-%b-%y %I:%M:%S %p',
     "Menbur Avenue": '%m/%d/%Y %I:%M:%S %p',
     "DCO HO": '%m/%d/%Y %I:%M:%S %p',
+    "Hunkemoller Avenue": '%m/%d/%Y %I:%M:%S %p',
 }
 # --- END FILE-SPECIFIC DATE FORMATS ---
 
@@ -397,6 +399,7 @@ LOCATION_MAP = {
         "BM FD Boulevard": "37",
         "Bm Ws sharq": "38",
         "DCO HO": "39",
+        "Yammay Al koutmall": "40",
     },
     "Al-hadabah times": {
         "Doha Store": "01",
@@ -470,6 +473,7 @@ LOCATION_MAP = {
         "LVER Mohalab": "16",
         "Menbur Avenue": "17",
         "DCO HO": "18",
+        "Hunkemoller Avenue": "19",
     },
 }
 

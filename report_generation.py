@@ -31,7 +31,8 @@ class ReportGenerator:
         self,
         detailed_df: pd.DataFrame,
         global_start_date,
-        global_end_date
+        global_end_date,
+        effective_dates_map: dict = None  # New Argument
     ) -> pd.DataFrame:
         """
         Build per-employee baseline summary for the given reporting window.
@@ -159,13 +160,31 @@ class ReportGenerator:
         summary["Expected_Rotational_Offs"] = 0.0
         summary["Rotational_Off_Weeks"] = 0.0
 
-        all_start = start_dt.date()
-        all_end = end_dt.date()
+        # Default map if none
+        if effective_dates_map is None:
+            effective_dates_map = {}
 
         for idx, row in summary.iterrows():
             emp_no = str(row["No."])
             src_names = str(row["Source_Names"]) if row["Source_Names"] else ""
             primary_source = src_names.split(",")[0].strip() if src_names else ""
+
+            # Determine Effective Window for this employee
+            # Default to global window
+            eff_start_ts, eff_end_ts = effective_dates_map.get(emp_no, (start_dt, end_dt))
+            
+            # Ensure we don't go strictly outside the global report boundary (already clipped in helper, but double check)
+            # Actually helper clips to global.
+            
+            eff_start_date = eff_start_ts.date()
+            eff_end_date = eff_end_ts.date()
+            
+            # Calculate Total Days in Employee's Effective Period
+            # (Used for checking if they were employed at all)
+            emp_total_days = (eff_end_date - eff_start_date).days + 1
+            if emp_total_days <= 0:
+                 # Should not happen if clipped correctly, but handle gracefully
+                 emp_total_days = 0
 
             try:
                 rules = get_effective_rules_for_employee_day(
@@ -179,12 +198,15 @@ class ReportGenerator:
                 )
 
             expected_work = get_expected_working_days_in_period(
-                all_start,
-                all_end,
+                eff_start_date,  # Use Employee Effective Start
+                eff_end_date,    # Use Employee Effective End
                 rules,
             )
 
-            total_offs = float(total_days_period) - float(expected_work)
+            # Total Offs calculation:
+            # Should be based on employee's period total days, NOT global total days.
+            # User: "we calculate the weekends for new hiring as per their specific period"
+            total_offs = float(emp_total_days) - float(expected_work)
 
             summary.at[idx, "Total_Expected_Working_Days_In_Period"] = float(expected_work)
             summary.at[idx, "Total_Employee_Period_OFFs"] = max(total_offs, 0.0)
@@ -277,10 +299,15 @@ class ReportGenerator:
             emp_df = window_df[window_df["No."].astype(str) == emp_no].copy()
 
             # Use the shared helper from vacation_adjustment.py
+            # CRITICAL: We pass the EMPLOYEE's effective window, not global.
+            # This ensures we don't count "absences" before they were hired or after they quit.
+            
+            eff_start_ts, eff_end_ts = effective_dates_map.get(emp_no, (start_dt, end_dt))
+            
             absent_dates_list = _enumerate_absent_dates(
                 emp_df=emp_df,
-                start=start_dt,
-                end=end_dt,
+                start=eff_start_ts, # Use Effective Start
+                end=eff_end_ts,     # Use Effective End
                 vacation_ranges=[],
                 weekend_days=weekend_days,
             )

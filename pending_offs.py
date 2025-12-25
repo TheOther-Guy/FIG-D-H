@@ -81,32 +81,60 @@ def _aggregate_pending_df(df: pd.DataFrame) -> pd.DataFrame:
         "number of days", "days", "pending", "off days"
     ]
 
-    pending_col = None
-    for col in df.columns:
-        if col in pending_candidates:
-            pending_col = col
-            break
-
+    pending_col = get_col(df, pending_candidates)
     if pending_col is None:
         logging.error(f"_aggregate_pending_df: No pending-day column found. Columns={df.columns}")
-        return pd.DataFrame(columns=["No.", "Total_Pending_OFFs"])
+        return pd.DataFrame(columns=["No.", "Total_Pending_OFFs", "Pending_OFF_Requested_Dates"])
+
+    # Possible date columns
+    start_candidates = ["from", "start", "start date", "from date"]
+    end_candidates = ["till", "to", "end date", "to date", "end"]
+    
+    start_col = get_col(df, start_candidates)
+    end_col = get_col(df, end_candidates)
 
     # Clean + numeric
     df[id_col] = df[id_col].astype(str).str.strip()
     df[pending_col] = (
         pd.to_numeric(df[pending_col], errors="coerce")
         .fillna(0)
-        .astype(int)
+        .astype(float) # Keep float for 0.5
     )
+
+    # Extract dates per row
+    def _get_dates(row):
+        dates = []
+        if start_col and pd.notna(row[start_col]):
+            s_dt = pd.to_datetime(row[start_col], errors='coerce')
+            e_dt = pd.to_datetime(row[end_col], errors='coerce') if end_col and pd.notna(row[end_col]) else s_dt
+            if pd.notna(s_dt) and pd.notna(e_dt):
+                # Enumerate range
+                dates = [d.strftime("%Y-%m-%d") for d in pd.date_range(s_dt, e_dt)]
+        return dates
+
+    df["requested_dates"] = df.apply(_get_dates, axis=1)
 
     # Aggregate days per employee
-    grouped = (
-        df.groupby(id_col)[pending_col].sum()
-        .reset_index()
-        .rename(columns={id_col: "No.", pending_col: "Total_Pending_OFFs"})
-    )
-
+    # We sum the count, and union the dates
+    grouped = df.groupby(id_col).agg({
+        pending_col: "sum",
+        "requested_dates": lambda x: sorted(list(set([d for sub in x for d in sub])))
+    }).reset_index().rename(columns={
+        id_col: "No.", 
+        pending_col: "Total_Pending_OFFs",
+        "requested_dates": "Pending_OFF_Requested_Dates"
+    })
+    
+    # Cast count to int for summary if appropriate, or keep float
+    # Users usually expect whole numbers for summary, but keep float for internal logic
     return grouped
+
+def get_col(df, candidates):
+    norm_cols = {str(c).strip().lower(): c for c in df.columns}
+    for cand in candidates:
+        if cand in norm_cols:
+            return norm_cols[cand]
+    return None
 
 
 def _normalize(name: str) -> str:
@@ -361,27 +389,52 @@ def apply_pending_offs(summary_df, pending_df):
             dt_list = sorted(set(dt_list))  # oldest -> newest
 
             pending_n = int(row.get("Total_Pending_OFFs", 0) or 0)
+            requested_dates = row.get("Pending_OFF_Requested_Dates", [])
+            
+            # Normalize requested dates
+            req_dts = []
+            if isinstance(requested_dates, list):
+                for d in requested_dates:
+                    try:
+                        req_dts.append(pd.to_datetime(d).date())
+                    except:
+                        continue
+            req_dts = sorted(set(req_dts))
 
-            if pending_n <= 0 or not dt_list:
-                remaining_dt = dt_list
-                pending_dt = []
-            else:
-                # most recent N dates → pending OFF
-                if pending_n >= len(dt_list):
-                    pending_dt = dt_list[:]          # all become pending
-                    remaining_dt = []
-                else:
-                    pending_dt = dt_list[-pending_n:]  # newest N
-                    remaining_dt = dt_list[:-pending_n]
+            pending_dt = []
+            remaining_dt = dt_list[:]
+
+            if pending_n > 0:
+                # 1. Prioritize Requested Dates
+                for rd in req_dts:
+                    if pending_n <= 0:
+                        break
+                    if rd in remaining_dt:
+                        pending_dt.append(rd)
+                        remaining_dt.remove(rd)
+                        pending_n -= 1
+                    # Global Rule: if date is not in absent list (has punch), 
+                    # do not apply credit or flag as pending off. 
+                    # Credit remains available for other absences.
+
+                # 2. Fallback to current logic (newest absences first)
+                if pending_n > 0 and remaining_dt:
+                    if pending_n >= len(remaining_dt):
+                        pending_dt.extend(remaining_dt)
+                        remaining_dt = []
+                    else:
+                        to_take = remaining_dt[-pending_n:]
+                        pending_dt.extend(to_take)
+                        remaining_dt = remaining_dt[:-pending_n]
 
             # Store canonical full list (ISO strings)
             cleaned_lists.append([d.isoformat() for d in dt_list])
 
             # Store remaining (after pending) also as ISO
-            final_after_pending_col.append([d.isoformat() for d in remaining_dt])
+            final_after_pending_col.append([d.isoformat() for d in sorted(remaining_dt)])
 
             # Store pending OFF dates explicitly (ISO)
-            pending_off_dates_col.append([d.isoformat() for d in sorted(pending_dt)])
+            pending_off_dates_col.append([d.isoformat() for d in sorted(set(pending_dt))])
 
         # Update base date column with cleaned ISO strings
         merged[date_col_base] = cleaned_lists

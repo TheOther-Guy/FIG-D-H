@@ -159,7 +159,7 @@ class AppUI:
         from io import BytesIO
         from data_processing import FingerprintProcessor
         from report_generation import ReportGenerator
-        from vacation_adjustment import load_vacation_file, apply_vacation_adjustments
+        from vacation_adjustment import load_vacation_file, apply_vacation_adjustments, get_employee_effective_windows
 
         # Mark that we have started processing
         st.session_state.processed_data_present = True
@@ -167,6 +167,10 @@ class AppUI:
 
 
         with st.spinner("Processing files and generating reports... This may take a moment."):
+            # Initialize vacation_df safely in outer scope
+            vacation_df = pd.DataFrame()
+            effective_dates_map = {}
+
             # ------------------------------------------------------------------
             # 1) Process raw fingerprint files -> combined_df
             # ------------------------------------------------------------------
@@ -199,11 +203,27 @@ class AppUI:
             # 3) Build the base summary (no HR overrides / pending offs yet)
             # ------------------------------------------------------------------
             if global_min_date and global_max_date and not detailed_report_df.empty:
+                # Load Vacation / Adjustment File FIRST for Effective Dates
+                if vacation_file:
+                    try:
+                        vacation_df = load_vacation_file(vacation_file)
+                        if not vacation_df.empty:
+                             effective_dates_map = get_employee_effective_windows(
+                                 vacation_df, 
+                                 global_min_date, 
+                                 global_max_date
+                             )
+                    except Exception as e:
+                        st.error(f"Error loading vacation file: {e}")
+                        # Don't return, process without effective dates
+                
                 report_generator = ReportGenerator(selected_company_name)
+                # Pass effective_dates_map to generate_summary_report
                 base_summary = report_generator.generate_summary_report(
                     detailed_report_df.copy(),
                     global_min_date,
-                    global_max_date
+                    global_max_date,
+                    effective_dates_map=effective_dates_map
                 )
 
                 # Optional baseline debug
@@ -212,19 +232,20 @@ class AppUI:
                     st.write("Baseline summary shape:", base_summary.shape)
 
                 # ------------------------------------------------------------------
-                # 4) Optional: apply HR overrides / vacations (HR_Override sheet)
+                # 5) Optional: apply HR overrides / vacations (HR_Override sheet)
                 # ------------------------------------------------------------------
                 final_summary = base_summary.copy()
                 adjusted_detail = pd.DataFrame()
                 pending_offs_detail = pd.DataFrame()
 
-                if vacation_file is not None:
+                if vacation_file is not None and not vacation_df.empty: # Use the already loaded vacation_df
                     try:
-                        overrides_df = load_vacation_file(vacation_file)
+                        # Use the already loaded DF as overrides_df
+                        overrides_df = vacation_df
 
                         if st.session_state.get("debug_mode", False):
                             st.info("DEBUG: Loaded HR_Override sheet from vacation file.")
-                            st.write("HR overrides rows:", len(overrides_df))
+                            st.write("HR overrides rows:", len(vacation_df))
 
                         # apply_vacation_adjustments returns:
                         #   - summary with Final_Absent_Days / Final_Absent_Dates
@@ -252,25 +273,27 @@ class AppUI:
                     # 5) Optional: apply Pending OFF credits (Pending Off sheet)
                     # ------------------------------------------------------------------
                     try:
+                        # CRITICAL: Reset pointer because it was read earlier by load_vacation_file
+                        vacation_file.seek(0)
                         pending_offs_df = load_pending_offs_from_vacation(vacation_file)
 
-                        if st.session_state.get("debug_mode", False):
-                            st.info("DEBUG: Loaded Pending Off sheet from vacation file.")
-                            st.write("Pending OFF rows:", len(pending_offs_df))
-
-                        if pending_offs_df is not None and not pending_offs_df.empty:
-                            # apply_pending_offs uses Final_Absent_Days if present,
-                            # otherwise falls back to Total_Absent_Days.
-                            final_summary, pending_offs_detail = apply_pending_offs(
-                                final_summary,
+                        # We only apply if we have loaded pending offs
+                        if not pending_offs_df.empty:
+                            if st.session_state.get("debug_mode", False):
+                                st.info("DEBUG: Loaded Pending OFF sheet.")
+                                st.write("Pending Offs rows:", len(pending_offs_df))
+    
+                            summary_with_pending, aggregated_detail = apply_pending_offs(
+                                final_summary, 
                                 pending_offs_df
                             )
-
-                            if st.session_state.get("debug_mode", False):
-                                st.info("DEBUG: Applied pending OFF credits.")
-                                st.write("Final summary (after pending offs) shape:", final_summary.shape)
+                            # Update summary to the version with pending offs applied
+                            final_summary = summary_with_pending
+                            pending_offs_detail = aggregated_detail
                         else:
-                            # Ensure we still have the expected columns in summary
+                            if st.session_state.get("debug_mode", False):
+                                st.info("DEBUG: No Pending Off data found in vacation file.")
+                            # Ensure we still have the expected columns in summary even if no pending offs
                             final_summary, pending_offs_detail = apply_pending_offs(final_summary, None)
 
                     except Exception as e:

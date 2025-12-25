@@ -203,22 +203,160 @@ def _enumerate_absent_dates(
 # --------------------------- Public API ---------------------------
 
 
-def load_vacation_file(uploaded_file) -> pd.DataFrame:
     """
     Parse HR overrides / adjustments file.
     Supports:
       - CSV files (single sheet)
       - Excel files with multiple sheets (Sick Leaves, Annual Leave, etc.)
-      - Variable header row positions (auto-detected)
-    
-    Logic:
-      1. Iterate through all sheets.
-      2. Skip 'Pending Off' (handled separately) and informational sheets.
-      3. For each sheet, auto-detect the header row by scanning for keywords.
-      4. Normalize columns using standard mappings.
-      5. If 'Type' column is missing, infer it from the Sheet Name.
-      6. Aggregate all valid rows into a single DataFrame.
+    ...
     """
+
+def get_employee_effective_windows(
+    overrides_df: pd.DataFrame,
+    global_start: pd.Timestamp,
+    global_end: pd.Timestamp
+) -> Dict[str, tuple]:
+    """
+    Calculate effective [start, end] window for each employee based on transactions.
+    
+    Rules:
+      - 'new_hire'          -> Sets effective start (earliest wins or user defined?) -> Usually defining start of contract.
+      - 'vacation_return'   -> Sets effective start (prior days ignored for absence).
+                               If multiple, use earliest or latest?
+                               "return from vacation" implies a start of active period.
+                               We'll treat it as a "Start Date" marker.
+      - 'stop_working'      -> Sets effective end.
+      
+    Returns:
+        dict: { emp_id_str: (effective_start_ts, effective_end_ts) }
+        If no override, returns (global_start, global_end).
+    """
+    if overrides_df is None or overrides_df.empty:
+        return {}
+
+    # Normalize columns first if not done (load_vacation_file does it, but defensive check good)
+    v = overrides_df.copy()
+    # Ensure canonical types
+    if "type" in v.columns:
+        # We assume load_vacation_file already ran _canonicalize_type
+        # But we can re-map just in case simple strings were passed manualy
+        pass 
+    
+    # 1. Maps
+    new_hire_map = {}
+    vac_return_map = {}
+    stop_work_map = {}
+    
+    # Normalize ID
+    if "id" in v.columns:
+        v["id"] = v["id"].astype(str).str.strip()
+    
+    # Parse dates if strictly needed
+    if "start_date" in v.columns:
+        v["start_date"] = pd.to_datetime(v["start_date"], errors="coerce")
+    if "end_date" in v.columns:
+        v["end_date"] = pd.to_datetime(v["end_date"], errors="coerce")
+
+    for _, row in v.iterrows():
+        emp_id = row.get("id")
+        if not emp_id: continue
+        
+        t = str(row.get("type", "")).lower()
+        sdt = row.get("start_date", pd.NaT)
+        edt = row.get("end_date", pd.NaT)
+        
+        # New Hire
+        if t == "new_hire" and pd.notna(sdt):
+            # If multiple new hire dates? Earliest logical start.
+            curr = new_hire_map.get(emp_id, pd.Timestamp.max)
+            new_hire_map[emp_id] = min(curr, sdt)
+            
+        # Vacation Return (treat as Start Date)
+        if t == "back_from_vacation" and pd.notna(sdt):
+            # User instruction: "prior days to this date doesn't count as absent"
+            # This acts like a start date.
+            curr = vac_return_map.get(emp_id, pd.Timestamp.max)
+            vac_return_map[emp_id] = min(curr, sdt)
+            
+        # Stop Working
+        if t == "stop_working":
+            # Date usually provided in date/end_date column
+            # If start_date is present, usage that.
+            date_val = edt if pd.notna(edt) else sdt
+            if pd.notna(date_val):
+                curr = stop_work_map.get(emp_id, pd.Timestamp.min)
+                stop_work_map[emp_id] = max(curr, date_val)
+
+    # 2. Build Result
+    # We iterate over all IDs found in overrides to ensure we capture them
+    # But function is usually called with a target list in mind.
+    # We will return a dict of *found* overrides. The caller defaults to global if missing.
+    
+    effective_map = {}
+    
+    all_ids = set(v["id"].unique())
+    
+    g_start = pd.to_datetime(global_start).normalize()
+    g_end = pd.to_datetime(global_end).normalize()
+
+    for emp_id in all_ids:
+        eff_start = g_start
+        eff_end = g_end
+        
+        # Apply Start Logic (New Hire OR Vacation Return)
+        # If both exist, which one wins? 
+        # Typically "Vacation Return" might be for an existing employee returning.
+        # "New Hire" is new. 
+        # We can take the LATEST of the starts if both exist? Or Earliest?
+        # User: "vacation return ... prior days are not counted".
+        # This implies the period STARTS at vacation return.
+        
+        starts = []
+        if emp_id in new_hire_map:
+            starts.append(new_hire_map[emp_id])
+        if emp_id in vac_return_map:
+            starts.append(vac_return_map[emp_id])
+            
+        if starts:
+            # If we have start markers, the effective start is the defined date.
+            # If multiple markers (e.g. New Hire Jan 1, Vacation Return Feb 1), 
+            # and we are in Feb report, Effective Start likely specific to the transaction context.
+            # For simplicity, if multiple "Start" directives exist, we arguably take the *latest* one 
+            # effectively "resetting" the start? 
+            # Or earliest?
+            # "new hiring... prior days ... doesn't count"
+            # "vacation return... prior days ... not counted"
+            # Safest interpretation: The effective start is the MAX of these dates 
+            # (limiting the active window as much as possible to strictly worked period).
+            # BUT: If New Hire is Jan 1, and Vacation Return is Jan 15. Days 1-15:
+            # If we say Start = Jan 15, then Jan 1-14 are excluded => Not Absent.
+            # If they were on vacation Jan 1-15, that fits.
+            # So MAX seems correct to shorten the window.
+            eff_start = max(starts).normalize()
+            
+        # Apply End Logic
+        if emp_id in stop_work_map:
+            # Stop working at date X. Later days not counted.
+            # So effective end is X.
+            eff_end = stop_work_map[emp_id].normalize()
+        
+        # Clip to global
+        # If eff_start < g_start, we just use g_start (already covered by caller logic usually, but robust here)
+        # Actually user might want "start date is X", if X < Global Start, then Effective Start = Global Start.
+        # If X > Global Start, Effective Start = X.
+        # So we take MAX(eff_start, g_start)
+        final_start = max(eff_start, g_start)
+        
+        # If eff_end > g_end, use g_end.
+        # If eff_end < g_end, use eff_end.
+        final_end = min(eff_end, g_end)
+        
+        effective_map[emp_id] = (final_start, final_end)
+        
+    return effective_map
+
+
+def load_vacation_file(uploaded_file) -> pd.DataFrame:
     import logging
     
     if uploaded_file is None:
@@ -286,9 +424,6 @@ def load_vacation_file(uploaded_file) -> pd.DataFrame:
             cols = list(df.columns)
             norm_map = {_norm(c): c for c in cols}
             
-            # Map of internal names -> possible external names (normalized)
-            # We look for normalized versions of keys in the df columns
-            
             # Helper to find column content
             def get_col(candidates):
                 for c in candidates:
@@ -300,14 +435,52 @@ def load_vacation_file(uploaded_file) -> pd.DataFrame:
             id_col = get_col(['no.', 'no', 'id', 'employee', 'employeeid', 'code', 'emp id'])
             name_col = get_col(['name', 'employee name', 'staff'])
             
-            # Type might come from column OR sheet name
+            # Determine canonical type early to select mapping
+            raw_type = sheet # Default to sheet name
             type_col = get_col(['type', 'leave type', 'reason', 'absence type'])
+            if type_col:
+                # If a type column exists, it might override sheet name, but usually sheet name implies the category
+                # For safety, let's stick to sheet-based categorization for column mapping 
+                # unless generic.
+                pass
             
-            # Days / Dates
+            canon_type = _canonicalize_type(raw_type)
+            
+            # --- Type-Specific Column Mapping ---
+            # Define candidates for strict lookup based on user rules
+            # Keys match the output of _canonicalize_type
+            
+            # Default candidates
+            start_candidates = ['start date', 'from', 'date from', 'start']
+            end_candidates = ['end date', 'to', 'date to', 'end']
+            
+            if canon_type == "sick":
+                start_candidates = ['absence from date', 'absence date'] + start_candidates
+                end_candidates = ['absence to date', 'absence to'] + end_candidates
+            elif canon_type == "emergency":
+                start_candidates = ['from', 'start']
+                end_candidates = ['till', 'to', 'end']
+            elif canon_type == "back_from_vacation":
+                start_candidates = ['return date', 'date of return', 'return']
+                end_candidates = [] # Single date
+            elif canon_type == "vacation": # Annual
+                start_candidates = ['from date', 'from']
+                end_candidates = ['to date', 'to']
+            elif canon_type == "new_hire":
+                start_candidates = ['date of hire', 'hire date', 'joining date']
+                end_candidates = [] # Single date
+            elif canon_type == "stop_working":
+                end_candidates = ['last day', 'leaving date'] # treated as "End Date" logic
+                start_candidates = [] 
+                
+            # strict lookup
+            start_col = get_col(start_candidates)
+            end_col = get_col(end_candidates)
             days_col = get_col(['days', 'number of days', 'count', 'duration', 'total days'])
-            start_col = get_col(['start date', 'from', 'date from', 'start'])
-            end_col = get_col(['end date', 'to', 'date to', 'end'])
-
+            
+            # For back_from_vacation or new_hire, map single date to start_date
+            # For stop_working, map single date to end_date
+            
             if not id_col:
                 # Skip sheets that don't look like data (e.g. cover sheets)
                 continue
@@ -322,16 +495,7 @@ def load_vacation_file(uploaded_file) -> pd.DataFrame:
             extracted = pd.DataFrame()
             extracted['id'] = df[id_col]
             extracted['name'] = df[name_col] if name_col else ""
-            
-            # Determine Type
-            if type_col:
-                extracted['type'] = df[type_col].astype(str)
-            else:
-                # Use Sheet Name as Type
-                extracted['type'] = sheet
-
-            # Canonicalize Type
-            extracted['type'] = extracted['type'].map(_canonicalize_type)
+            extracted['type'] = canon_type
 
             # Determine Days/Range
             if start_col or end_col:
