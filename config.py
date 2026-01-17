@@ -231,6 +231,32 @@ COMPANY_CONFIGS = {
 }
 # --- END COMPANY-SPECIFIC CONFIGURATIONS ---
 
+def normalize_employee_id(emp_id) -> str:
+    """
+    Robustly normalizes employee IDs to a standard string format.
+    Handles:
+      - Floats: 1084.0 -> '1084'
+      - Integers: 1084 -> '1084'
+      - Strings: ' 1084 ' -> '1084', '1084.0' -> '1084'
+      - None/NaN: -> ''
+    """
+    if pd.isna(emp_id):
+        return ""
+    
+    s = str(emp_id).strip()
+    
+    # Handle '1084.0' specifically
+    if '.' in s:
+        try:
+            # Try to convert to float then to int to remove .0
+            f = float(s)
+            if f.is_integer():
+                return str(int(f))
+        except (ValueError, TypeError):
+            pass
+            
+    return s
+
 # --- FILE-SPECIFIC DATE FORMATS ---
 # Maps Source_Name (derived from filename) to its specific datetime format string.
 # These formats are tried first for matching files.
@@ -564,13 +590,10 @@ def get_effective_rules_for_employee_day(company_name: str, employee_no: str, so
     location_rules = company_config.get("location_rules", {}).get(source_name, {})
     effective_rules = merge_configs(effective_rules, location_rules)
 
-    # --- New Logic: If location has no explicit weekend days and is not already rotational, imply rotational_off ---
-    # This ensures a universal "1 day off per week" rule unless explicitly overridden by employee-specific config
-    # or if the location rule itself explicitly sets is_rotational_off to False with defined weekend_days.
+    # --- Reverted Logic: Only imply rotational if explicitly empty/None ---
     if (effective_rules.get("weekend_days") == [] or effective_rules.get("weekend_days") is None) and \
        not effective_rules.get("is_rotational_off", False):
         effective_rules["is_rotational_off"] = True
-        # If rotational_days_off_per_week wasn't already set, default it to 1 for this implicit rotational type
         if "rotational_days_off_per_week" not in effective_rules:
             effective_rules["rotational_days_off_per_week"] = 1
     # --- End New Logic ---

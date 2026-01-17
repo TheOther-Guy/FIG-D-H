@@ -14,6 +14,7 @@ Updated Logic:
 
 import pandas as pd
 import streamlit as st
+from config import normalize_employee_id
 
 
 # -----------------------------------------------------------
@@ -94,7 +95,7 @@ def _aggregate_pending_df(df: pd.DataFrame) -> pd.DataFrame:
     end_col = get_col(df, end_candidates)
 
     # Clean + numeric
-    df[id_col] = df[id_col].astype(str).str.strip()
+    df[id_col] = df[id_col].apply(normalize_employee_id)
     df[pending_col] = (
         pd.to_numeric(df[pending_col], errors="coerce")
         .fillna(0)
@@ -304,7 +305,7 @@ def apply_pending_offs(summary_df, pending_df):
     # 3) Normalize IDs in pending_df
     # ---------------------------------------------
     pending_df = pending_df.copy()
-    pending_df["No."] = pending_df["No."].astype(str).str.strip()
+    pending_df["No."] = pending_df["No."].apply(normalize_employee_id)
 
     # ---------------------------------------------
     # 4) Merge + numeric pending offs
@@ -317,8 +318,8 @@ def apply_pending_offs(summary_df, pending_df):
 
     merged["Total_Pending_OFFs"] = (
         pd.to_numeric(merged["Total_Pending_OFFs"], errors="coerce")
-        .fillna(0)
-        .astype(int)
+        .fillna(0.0)
+        .astype(float)
     )
 
     # ---------------------------------------------
@@ -327,7 +328,7 @@ def apply_pending_offs(summary_df, pending_df):
     # ---------------------------------------------
     merged["Total_Absent_After_Pending"] = (
         baseline - merged["Total_Pending_OFFs"]
-    ).clip(lower=0).astype(int)
+    ).clip(lower=0.0).astype(float)
 
     # ---------------------------------------------
     # 6) Date-level logic for pending OFFs
@@ -447,9 +448,18 @@ def apply_pending_offs(summary_df, pending_df):
     merged["Pending_OFF_Dates"] = pending_off_dates_col
 
     # Reconcile numeric Total_Absent_After_Pending with date lists (authoritative)
-    merged["Total_Absent_After_Pending"] = merged["Final_Absent_Dates_After_Pending"].apply(
-        lambda lst: len(lst) if isinstance(lst, list) else 0
-    ).astype(int)
+    # Since date lists represent whole days, if we have fractional pending offs, 
+    # we should reflect them in the numeric count.
+    # Total_Absent_After_Pending = len(Absent_Dates) - Fractional_Credit_Used_on_other_non_listed_days?
+    # Actually, the user says "days marked as absent in summary sheet".
+    # If they have 3.5 pending offs and 3 absent dates, they should have 0 absent days and 0.5 credit left.
+    # If they have 3.5 pending offs and 10 absent dates, they should have 6.5 absent days.
+    
+    # Authoritative Calculation:
+    merged["Total_Absent_After_Pending"] = (
+        merged[base_days_col].fillna(0).astype(float) - 
+        merged["Total_Pending_OFFs"].fillna(0.0).astype(float)
+    ).clip(lower=0.0)
 
     # ---------------------------------------------
     # 7) Debug info (optional)

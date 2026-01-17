@@ -347,7 +347,7 @@ class AppUI:
         global_min_date = st.session_state.global_min_date_cache
         global_max_date = st.session_state.global_max_date_cache
 
-        tab1, tab2, tab3, tab4 = st.tabs(["Detailed Report", "Summary Report", "Analysis & Insights", "Vacation Adjustments"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["Detailed Report", "Summary Report", "Analysis & Insights", "Vacation Adjustments", "❗ Error Log"])
 
         with tab1:
             if not detailed_report_df.empty:
@@ -392,6 +392,13 @@ class AppUI:
                 st.dataframe(adjusted_kpi_df, use_container_width=True)
             else:
                 st.info("No vacation or adjustment file uploaded.")
+        with tab5:
+            st.subheader("🚩 Processing Error Log")
+            if not error_log_df.empty:
+                st.write("The following issues were encountered during file processing:")
+                st.dataframe(error_log_df, use_container_width=True)
+            else:
+                st.success("No errors recorded during the last run.")
 
     def _display_download_button(self):
         """Displays download button for Excel report."""

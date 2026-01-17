@@ -1,7 +1,7 @@
 import pandas as pd
 import re
 from typing import Optional, List, Dict
-from config import COMPANY_CONFIGS  # weekend rules per company
+from config import COMPANY_CONFIGS, normalize_employee_id  # weekend rules per company
 
 # --------------------------- Helpers ---------------------------
 
@@ -249,7 +249,7 @@ def get_employee_effective_windows(
     
     # Normalize ID
     if "id" in v.columns:
-        v["id"] = v["id"].astype(str).str.strip()
+        v["id"] = v["id"].apply(normalize_employee_id)
     
     # Parse dates if strictly needed
     if "start_date" in v.columns:
@@ -258,7 +258,7 @@ def get_employee_effective_windows(
         v["end_date"] = pd.to_datetime(v["end_date"], errors="coerce")
 
     for _, row in v.iterrows():
-        emp_id = row.get("id")
+        emp_id = normalize_employee_id(row.get("id"))
         if not emp_id: continue
         
         t = str(row.get("type", "")).lower()
@@ -432,7 +432,7 @@ def load_vacation_file(uploaded_file) -> pd.DataFrame:
                         return norm_map[n]
                 return None
 
-            id_col = get_col(['no.', 'no', 'id', 'employee', 'employeeid', 'code', 'emp id'])
+            id_col = get_col(['no.', 'no', 'id', 'employee', 'employeeid', 'code', 'emp id', 'ac-no.'])
             name_col = get_col(['name', 'employee name', 'staff'])
             
             # Determine canonical type early to select mapping
@@ -487,7 +487,7 @@ def load_vacation_file(uploaded_file) -> pd.DataFrame:
 
             # 5. Extract Data
             # Clean ID
-            df[id_col] = df[id_col].astype(str).str.strip()
+            df[id_col] = df[id_col].apply(normalize_employee_id)
             # Remove total rows or empty IDs
             df = df[df[id_col].str.lower() != 'nan']
             df = df[~df[id_col].str.lower().str.contains('total', na=False)]
@@ -665,7 +665,7 @@ def apply_vacation_adjustments(
     if "id" not in v.columns:
         raise ValueError("Vacation overrides file missing required 'id' column after normalization.")
 
-    v["id"] = v["id"].astype(str).str.strip()
+    v["id"] = v["id"].apply(normalize_employee_id)
 
     # Range-based dates if present
     if has_ranges:
@@ -707,7 +707,7 @@ def apply_vacation_adjustments(
     # map: emp_id -> list[pd.Timestamp]
     baseline_absent_map = {}
     for _, row in s.iterrows():
-        emp_id = str(row["No."])
+        emp_id = normalize_employee_id(row["No."])
         dates = row["Absent_Dates"]
         if not isinstance(dates, list):
             dates = []
@@ -751,7 +751,7 @@ def apply_vacation_adjustments(
     detail_rows = []            # for per-type detail sheet
 
     for _, row in s.iterrows():
-        emp_id = str(row["No."])
+        emp_id = normalize_employee_id(row["No."])
         baseline_dates = baseline_absent_map.get(emp_id, [])
 
         # 4.1 Effective employment window = global window adjusted by New Hire / Stop Working
@@ -869,8 +869,8 @@ def apply_vacation_adjustments(
     # ------------------------------------------------------------------
     # 5. Push results back into summary_df
     # ------------------------------------------------------------------
-    s["Excused_Total"] = s["No."].astype(str).map(excused_total_map).fillna(0).astype(int)
-    s["Final_Absent_Dates"] = s["No."].astype(str).map(final_absent_dates_map)
+    s["Excused_Total"] = s["No."].apply(normalize_employee_id).map(excused_total_map).fillna(0).astype(int)
+    s["Final_Absent_Dates"] = s["No."].apply(normalize_employee_id).map(final_absent_dates_map)
     s["Final_Absent_Dates"] = s["Final_Absent_Dates"].apply(
         lambda x: x if isinstance(x, list) else []
     )

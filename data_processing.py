@@ -14,7 +14,8 @@ from config import (
     FILE_DATE_FORMATS,
     COLUMN_MAPPING,
     format_timedelta_to_hms,
-    get_effective_rules_for_employee_day
+    get_effective_rules_for_employee_day,
+    normalize_employee_id
 )
 
 # Import Second Cup specific logic functions
@@ -338,7 +339,7 @@ class FingerprintProcessor:
             combined_df['Date'] = combined_df['Adjusted_Date']
             combined_df.drop(columns=['Adjusted_Date'], inplace=True)
 
-        combined_df['No.'] = combined_df['No.'].astype(str) # Ensure 'No.' is string for consistent grouping
+        combined_df['No.'] = combined_df['No.'].apply(normalize_employee_id) # Ensure 'No.' is string for consistent grouping
 
         return combined_df
 

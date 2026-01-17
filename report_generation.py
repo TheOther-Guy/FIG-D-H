@@ -6,6 +6,7 @@ from config import (
     get_effective_rules_for_employee_day,
     get_expected_working_days_in_period,
     COMPANY_CONFIGS,
+    normalize_employee_id,
 )
 
 
@@ -165,7 +166,7 @@ class ReportGenerator:
             effective_dates_map = {}
 
         for idx, row in summary.iterrows():
-            emp_no = str(row["No."])
+            emp_no = normalize_employee_id(row["No."])
             src_names = str(row["Source_Names"]) if row["Source_Names"] else ""
             primary_source = src_names.split(",")[0].strip() if src_names else ""
 
@@ -220,7 +221,7 @@ class ReportGenerator:
             else:
                 summary.at[idx, "Expected_Weekends_In_Period"] = max(total_offs, 0.0)
 
-        # --- baseline Total_Absent_Days (float, then coerced to int for report) ---
+        # --- baseline Total_Absent_Days (float, then coerced to int if whole report) ---
         summary["Total_Absent_Days"] = (
             summary["Total_Expected_Working_Days_In_Period"]
             - summary["Total_Present_Days"]
@@ -278,7 +279,7 @@ class ReportGenerator:
         summary["Absent_Dates"] = [[] for _ in range(len(summary))]
 
         for idx, row in summary.iterrows():
-            emp_no = str(row["No."])
+            emp_no = normalize_employee_id(row["No."])
             src_names = str(row["Source_Names"]) if row["Source_Names"] else ""
             primary_source = src_names.split(",")[0].strip() if src_names else ""
 
