@@ -17,10 +17,12 @@ from analysis_functions import (
     analyze_employee_vs_location_averages,
     generate_location_recommendations
 )
-from config import COMPANY_CONFIGS, format_timedelta_to_hms # Added format_timedelta_to_hms import
-
 # >>> NEW: vacation adjustments
 from vacation_adjustment import load_vacation_file, apply_vacation_adjustments
+
+# >>> NEW: store operations logic
+from store_ops_logic import fetch_store_ops_from_url, compare_criteria_with_actual
+from config import COMPANY_CONFIGS, format_timedelta_to_hms, STORE_OPS_LINKS
 
 class AppUI:
     """
@@ -52,6 +54,8 @@ class AppUI:
             st.session_state.adjusted_kpi_df_cache = pd.DataFrame()
         if 'blocking_error' not in st.session_state:
             st.session_state.blocking_error = None
+        if 'store_ops_discrepancies_df_cache' not in st.session_state:
+            st.session_state.store_ops_discrepancies_df_cache = pd.DataFrame()
 
     def display_main_page(self):
         """Displays the main Streamlit page for the fingerprint report generator."""
@@ -127,8 +131,8 @@ class AppUI:
         st.session_state.detailed_report_df_cache = pd.DataFrame()
         st.session_state.summary_report_df_cache = pd.DataFrame()
         st.session_state.adjusted_kpi_df_cache = pd.DataFrame()
-        # NEW: cache for aggregated Pending OFF credits
         st.session_state.pending_offs_df_cache = pd.DataFrame()
+        st.session_state.store_ops_discrepancies_df_cache = pd.DataFrame()
         st.session_state.blocking_error = None # Clear blocking error on reset
 
         # Meta / helper caches
@@ -311,6 +315,54 @@ class AppUI:
                 st.session_state.adjusted_kpi_df_cache = adjusted_detail
                 st.session_state.pending_offs_df_cache = pending_offs_detail
 
+                # ------------------------------------------------------------------
+                # 6.5) NEW: Store Operations Comparison
+                # ------------------------------------------------------------------
+                # Check for specific link for each location present in the summary
+                # For simplicity, we'll try to fetch for the 'selected_company_name''s primary location if only one,
+                # or check the overall Source_Names. 
+                # Let's try to match anything in STORE_OPS_LINKS against the locations in final_summary.
+                
+                all_discrepancies = []
+                unique_locations = []
+                if "Source_Names" in final_summary.columns:
+                    unique_locations = set([loc.strip() for sublist in final_summary["Source_Names"].str.split(",") for loc in sublist if loc.strip()])
+                
+                for loc in unique_locations:
+                    if loc in STORE_OPS_LINKS:
+                        url = STORE_OPS_LINKS[loc]
+                        if st.session_state.get("debug_mode", False):
+                            st.info(f"DEBUG: Fetching Store Ops Criteria for '{loc}' from URL.")
+                        
+                        raw_result = fetch_store_ops_from_url(url)
+                        if not raw_result.empty:
+                            res = compare_criteria_with_actual(raw_result, detailed_report_df)
+                            dis_df = res['discrepancies']
+                            overrides_map = res['overrides'] # { emp_id: { date_obj: status } }
+
+                            if not dis_df.empty:
+                                dis_df["Location"] = loc
+                                all_discrepancies.append(dis_df)
+                            
+                            # Apply overrides to final_summary
+                            # We need a function to reconcile: Baseline -> HR Window -> Store OFFs -> HR Leaves -> Pending
+                            from report_generation import reconcile_hybrid_absences
+                            final_summary = reconcile_hybrid_absences(
+                                final_summary, 
+                                overrides_map, 
+                                detailed_report_df,
+                                st.session_state.global_min_date_cache,
+                                st.session_state.global_max_date_cache
+                            )
+
+                if all_discrepancies:
+                    st.session_state.store_ops_discrepancies_df_cache = pd.concat(all_discrepancies, ignore_index=True)
+                else:
+                    st.session_state.store_ops_discrepancies_df_cache = pd.DataFrame()
+                
+                # Update cache with reconciled summary
+                st.session_state.summary_report_df_cache = final_summary
+
             else:
                 # If we cannot determine a valid date window or no detailed rows,
                 # we still want the UI to render gracefully.
@@ -347,7 +399,14 @@ class AppUI:
         global_min_date = st.session_state.global_min_date_cache
         global_max_date = st.session_state.global_max_date_cache
 
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["Detailed Report", "Summary Report", "Analysis & Insights", "Vacation Adjustments", "❗ Error Log"])
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+            "Detailed Report", 
+            "Summary Report", 
+            "Analysis & Insights", 
+            "Vacation Adjustments", 
+            "🏪 Store Ops Discrepancies",
+            "❗ Error Log"
+        ])
 
         with tab1:
             if not detailed_report_df.empty:
@@ -392,7 +451,17 @@ class AppUI:
                 st.dataframe(adjusted_kpi_df, use_container_width=True)
             else:
                 st.info("No vacation or adjustment file uploaded.")
+        
         with tab5:
+            st.subheader("🏪 Store Operations Discrepancy Report")
+            dis_cache = st.session_state.get("store_ops_discrepancies_df_cache", pd.DataFrame())
+            if not dis_cache.empty:
+                st.warning("⚠️ The following discrepancies were found between Store Operations criteria and actual fingerprint logs.")
+                st.dataframe(dis_cache, use_container_width=True)
+            else:
+                st.success("✅ No discrepancies found or no Store Operations criteria link defined for selected locations.")
+
+        with tab6:
             st.subheader("🚩 Processing Error Log")
             if not error_log_df.empty:
                 st.write("The following issues were encountered during file processing:")

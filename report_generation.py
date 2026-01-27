@@ -602,3 +602,129 @@ class ReportGenerator:
 
 
 
+
+
+def reconcile_hybrid_absences(
+    summary_df: pd.DataFrame,
+    overrides_map: dict,
+    detailed_df: pd.DataFrame,
+    global_start_date: date,
+    global_end_date: date
+) -> pd.DataFrame:
+    """
+    Reconciles the 'Final_Absent_Dates' in summary_df with the authoritative
+    Store Ops status (overrides_map).
+
+    Logic:
+      1. Start with the employee's current 'Final_Absent_Dates' (calculated from
+         Baseline - HR Adjustments).
+      2. Check each absent date against the Store Ops Map ({emp_id: {date: status}}).
+      3. If Store Ops says 'OFF', 'OH' (Off Holiday), 'VC' (Vacation), 'SL' (Sick),
+         'XO' (Extra Off), 'DP' (Public Holiday), then we EXCUSE that absence.
+         (i.e., remove it from Final_Absent_Dates).
+      4. If Store Ops matches 'HD' (Half Day) or 'FD' (Full Day Off / Pending),
+         we might also excuse it depending on pending logic, but usually 'OFF' is the main one.
+         Let's trust the 'status' implies excused if it's not 'WORK' or 'PT' (Present).
+
+    Args:
+        summary_df: The employee summary with 'Final_Absent_Dates'.
+        overrides_map: { emp_id (str) : { date_obj : status_str } }
+        detailed_df: (Unused for now, but passed for context/logging)
+        global_start_date: report start
+        global_end_date: report end
+
+    Returns:
+        pd.DataFrame: updated summary_df with fewer absences.
+    """
+    if summary_df.empty:
+        return summary_df
+
+    # Copy to avoid SettingWithCopy warnings
+    df = summary_df.copy()
+
+    # Ensure Final_Absent_Dates exists; if not, fallback to Absent_Dates
+    if "Final_Absent_Dates" not in df.columns:
+        if "Absent_Dates" in df.columns:
+            df["Final_Absent_Dates"] = df["Absent_Dates"]
+        else:
+            df["Final_Absent_Dates"] = [[] for _ in range(len(df))]
+
+    # Ensure list type
+    df["Final_Absent_Dates"] = df["Final_Absent_Dates"].apply(
+        lambda x: x if isinstance(x, list) else []
+    )
+
+    # Track how many days excused by Store Ops
+    store_ops_excused_counts = []
+    new_final_dates_col = []
+
+    # Define statuses that count as "Excused" if the person is absent
+    # Strict Codes from User:
+    # PT : PRESENT (Not Excused)
+    # AB : ABSENT (Not Excused)
+    # SL : SICK LEAVE (Excused)
+    # VC : VACATION (Excused)
+    # XO : EXTRA OFF (Excused)
+    # TR : TRANSFERRED (Excused)
+    # HD : HALF DAY PENDING (Excused)
+    # FD : FULL DAY PENDING (Excused)
+    # OFF : OFF DAY (Excused)
+    # OH : HALF DAY OFF (Excused)
+    # DP : DAY OF PUBLIC HOLIDAY (Excused)
+    EXCUSED_STATUSES = {
+        "SL", "VC", "XO", "TR", "HD", "FD", "OFF", "OH", "DP"
+    }
+
+    for idx, row in df.iterrows():
+        emp_id = normalize_employee_id(row.get("No."))
+        current_absences = row.get("Final_Absent_Dates", [])
+        
+        # If no overrides for this employee, skip
+        emp_overrides = overrides_map.get(emp_id, {})
+        if not emp_overrides:
+            store_ops_excused_counts.append(0)
+            new_final_dates_col.append(current_absences)
+            continue
+
+        valid_absences = []
+        excused_count = 0
+
+        for date_str in current_absences:
+            # Parse date string to object
+            try:
+                d_obj = pd.to_datetime(date_str).date()
+            except Exception:
+                # keep if cannot parse
+                valid_absences.append(date_str)
+                continue
+
+            # Check status
+            status = emp_overrides.get(d_obj)
+            if status:
+                st_normalized = str(status).strip().upper()
+                if st_normalized in EXCUSED_STATUSES:
+                    # It is excused by Store Ops
+                    excused_count += 1
+                    continue
+            
+            # If not excused, keep it
+            valid_absences.append(date_str)
+
+        store_ops_excused_counts.append(excused_count)
+        new_final_dates_col.append(valid_absences)
+
+    df["Store_Ops_Excused_Count"] = store_ops_excused_counts
+    df["Final_Absent_Dates"] = new_final_dates_col
+    # Also update the list used for 'After Pending' if it was already created,
+    # because if it's excused by Google Sheets, it shouldn't be counted as absent 
+    # even if pending logic ran before.
+    # However, strictly speaking, pending logic runs before this. 
+    # We should sync them.
+    if "Final_Absent_Dates_After_Pending" in df.columns:
+        df["Final_Absent_Dates_After_Pending"] = new_final_dates_col
+
+    df["Final_Absent_Days"] = df["Final_Absent_Dates"].apply(len)
+    # Recalculate 'Total_Absent_After_Pending' to match the authoritative dates
+    df["Total_Absent_After_Pending"] = df["Final_Absent_Days"]
+
+    return df
