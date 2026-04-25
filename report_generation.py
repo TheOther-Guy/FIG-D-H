@@ -564,10 +564,8 @@ class ReportGenerator:
                         flag = "is_vacation"
                     elif d in pending_dates:
                         flag = "is_pending_off"
-                    elif d in absent_after:
-                        flag = "is_absent"
                     else:
-                        flag = "is_working_day"
+                        flag = "is_EMPTY-input"
 
                 days_rows.append({
                     "No.": emp,
@@ -577,6 +575,18 @@ class ReportGenerator:
                 })
 
         days_df = pd.DataFrame(days_rows)
+
+        # ------------------------------------------------------------------
+        # ADD DAYS_FLAGS COUNTS TO SUMMARY
+        # ------------------------------------------------------------------
+        if not days_df.empty:
+            flag_counts = days_df.groupby(["No.", "Day_Flag"]).size().unstack(fill_value=0).reset_index()
+            summary_df = summary_df.merge(flag_counts, on="No.", how="left")
+            
+            new_cols = [c for c in flag_counts.columns if c != "No."]
+            for c in new_cols:
+                summary_df[c] = summary_df[c].fillna(0).astype(int)
+
 
         # ------------------------------------------------------------------
         # WRITE EXCEL — Correct sheet order
@@ -605,11 +615,6 @@ class ReportGenerator:
                 days_df.to_excel(writer, sheet_name="Days_Flags", index=False)
 
         output_buffer.seek(0)
-
-
-
-
-
 
 def reconcile_hybrid_absences(
     summary_df: pd.DataFrame,

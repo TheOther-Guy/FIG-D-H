@@ -14,15 +14,18 @@ def fetch_store_ops_from_url(url: str) -> pd.DataFrame:
         response.raise_for_status()
         df_raw = pd.read_csv(io.StringIO(response.text), header=None)
         
-        # 0. Extract Year from the first row (e.g. '25-Mar-2026')
+        # 0. Extract Year from the first few rows (e.g. '25-Mar-2026')
         year_str = ""
         import re
-        for cell in df_raw.iloc[0].astype(str).fillna(""):
-            if "202" in cell:
-                match = re.search(r'(202\d)', cell)
+        for i in range(min(5, len(df_raw))):
+            for col in df_raw.columns:
+                val = str(df_raw[col].iloc[i]).strip()
+                match = re.search(r'\d{4}', val)
                 if match:
-                    year_str = match.group(1)
+                    year_str = match.group(0)
                     break
+            if year_str:
+                break
         if not year_str:
             from datetime import datetime
             year_str = str(datetime.now().year)
