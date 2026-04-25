@@ -242,87 +242,30 @@ class AppUI:
                 adjusted_detail = pd.DataFrame()
                 pending_offs_detail = pd.DataFrame()
 
-                if vacation_file is not None and not vacation_df.empty: # Use the already loaded vacation_df
+                if vacation_file is not None and not vacation_df.empty: 
                     try:
-                        # Use the already loaded DF as overrides_df
                         overrides_df = vacation_df
 
                         if st.session_state.get("debug_mode", False):
                             st.info("DEBUG: Loaded HR_Override sheet from vacation file.")
-                            st.write("HR overrides rows:", len(vacation_df))
 
-                        # apply_vacation_adjustments returns:
-                        #   - summary with Final_Absent_Days / Final_Absent_Dates
-                        #   - per-type detail (Adjusted Absences (Per Type))
                         adjusted_summary, adjusted_detail = apply_vacation_adjustments(
                             base_summary.copy(),
                             overrides_df,
                             selected_company_name,
                             global_min_date,
                             global_max_date,
-                            detailed_df=detailed_report_df  # pass detailed DF so Absent_Dates can be recomputed
+                            detailed_df=detailed_report_df
                         )
-
                         final_summary = adjusted_summary
-
                     except Exception as e:
-                        # If vacation parsing fails, fall back gracefully to base summary
                         st.error(f"Error while applying vacation adjustments: {e}")
-                        if st.session_state.get("debug_mode", False):
-                            st.exception(e)
                         adjusted_detail = pd.DataFrame()
                         final_summary = base_summary.copy()
 
-                    # ------------------------------------------------------------------
-                    # 5) Optional: apply Pending OFF credits (Pending Off sheet)
-                    # ------------------------------------------------------------------
-                    try:
-                        # CRITICAL: Reset pointer because it was read earlier by load_vacation_file
-                        vacation_file.seek(0)
-                        pending_offs_df = load_pending_offs_from_vacation(vacation_file)
-
-                        # We only apply if we have loaded pending offs
-                        if not pending_offs_df.empty:
-                            if st.session_state.get("debug_mode", False):
-                                st.info("DEBUG: Loaded Pending OFF sheet.")
-                                st.write("Pending Offs rows:", len(pending_offs_df))
-    
-                            summary_with_pending, aggregated_detail = apply_pending_offs(
-                                final_summary, 
-                                pending_offs_df
-                            )
-                            # Update summary to the version with pending offs applied
-                            final_summary = summary_with_pending
-                            pending_offs_detail = aggregated_detail
-                        else:
-                            if st.session_state.get("debug_mode", False):
-                                st.info("DEBUG: No Pending Off data found in vacation file.")
-                            # Ensure we still have the expected columns in summary even if no pending offs
-                            final_summary, pending_offs_detail = apply_pending_offs(final_summary, None)
-
-                    except Exception as e:
-                        # If Pending Off parsing fails, we still keep the vacation-adjusted summary
-                        st.error(f"Error while applying pending OFF credits: {e}")
-                        if st.session_state.get("debug_mode", False):
-                            st.exception(e)
-                        # Fallback: assume no pending offs, but ensure columns exist
-                        final_summary, pending_offs_detail = apply_pending_offs(final_summary, None)
-
                 # ------------------------------------------------------------------
-                # 6) Cache final summary & adjustment detail
+                # 6) NEW: Store Operations Comparison (Applied BEFORE Pending Offs)
                 # ------------------------------------------------------------------
-                st.session_state.summary_report_df_cache = final_summary
-                st.session_state.adjusted_kpi_df_cache = adjusted_detail
-                st.session_state.pending_offs_df_cache = pending_offs_detail
-
-                # ------------------------------------------------------------------
-                # 6.5) NEW: Store Operations Comparison
-                # ------------------------------------------------------------------
-                # Check for specific link for each location present in the summary
-                # For simplicity, we'll try to fetch for the 'selected_company_name''s primary location if only one,
-                # or check the overall Source_Names. 
-                # Let's try to match anything in STORE_OPS_LINKS against the locations in final_summary.
-                
                 all_discrepancies = []
                 unique_locations = []
                 if "Source_Names" in final_summary.columns:
@@ -338,30 +281,57 @@ class AppUI:
                         if not raw_result.empty:
                             res = compare_criteria_with_actual(raw_result, detailed_report_df)
                             dis_df = res['discrepancies']
-                            overrides_map = res['overrides'] # { emp_id: { date_obj: status } }
+                            overrides_map = res['overrides']
 
                             if not dis_df.empty:
                                 dis_df["Location"] = loc
                                 all_discrepancies.append(dis_df)
                             
-                            # Apply overrides to final_summary
-                            # We need a function to reconcile: Baseline -> HR Window -> Store OFFs -> HR Leaves -> Pending
                             from report_generation import reconcile_hybrid_absences
                             final_summary = reconcile_hybrid_absences(
                                 final_summary, 
                                 overrides_map, 
                                 detailed_report_df,
-                                st.session_state.global_min_date_cache,
-                                st.session_state.global_max_date_cache
+                                global_min_date,
+                                global_max_date
                             )
 
                 if all_discrepancies:
                     st.session_state.store_ops_discrepancies_df_cache = pd.concat(all_discrepancies, ignore_index=True)
                 else:
                     st.session_state.store_ops_discrepancies_df_cache = pd.DataFrame()
-                
-                # Update cache with reconciled summary
+
+                # ------------------------------------------------------------------
+                # 7) apply Pending OFF credits (Pending Off sheet) - authoritative final step
+                # ------------------------------------------------------------------
+                pending_offs_detail = pd.DataFrame()
+                if vacation_file is not None:
+                    try:
+                        vacation_file.seek(0)
+                        pending_offs_df = load_pending_offs_from_vacation(vacation_file)
+
+                        if not pending_offs_df.empty:
+                            summary_with_pending, aggregated_detail = apply_pending_offs(
+                                final_summary, 
+                                pending_offs_df
+                            )
+                            final_summary = summary_with_pending
+                            pending_offs_detail = aggregated_detail
+                        else:
+                            final_summary, pending_offs_detail = apply_pending_offs(final_summary, None)
+
+                    except Exception as e:
+                        st.error(f"Error while applying pending OFF credits: {e}")
+                        final_summary, pending_offs_detail = apply_pending_offs(final_summary, None)
+                else:
+                    final_summary, pending_offs_detail = apply_pending_offs(final_summary, None)
+
+                # ------------------------------------------------------------------
+                # 8) Cache final results (all adjusted KPIs)
+                # ------------------------------------------------------------------
                 st.session_state.summary_report_df_cache = final_summary
+                st.session_state.adjusted_kpi_df_cache = adjusted_detail
+                st.session_state.pending_offs_df_cache = pending_offs_detail
 
             else:
                 # If we cannot determine a valid date window or no detailed rows,

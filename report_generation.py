@@ -715,16 +715,22 @@ def reconcile_hybrid_absences(
 
     df["Store_Ops_Excused_Count"] = store_ops_excused_counts
     df["Final_Absent_Dates"] = new_final_dates_col
-    # Also update the list used for 'After Pending' if it was already created,
-    # because if it's excused by Google Sheets, it shouldn't be counted as absent 
-    # even if pending logic ran before.
-    # However, strictly speaking, pending logic runs before this. 
-    # We should sync them.
+    
+    # Update Final_Absent_Days count
+    df["Final_Absent_Days"] = df["Final_Absent_Dates"].apply(len)
+    
+    # We do NOT overwrite Final_Absent_Dates_After_Pending or Total_Absent_After_Pending here,
+    # because they might have already been processed by pending_offs.py, or will be.
+    # We want these to remain in sync with Final_Absent_Dates initially.
     if "Final_Absent_Dates_After_Pending" in df.columns:
+        # If it already exists, it means we are running in a state where it was already calculated.
+        # However, according to the new plan, we run Store Ops BEFORE pending offs.
+        # To be safe, if we are editing the baseline Final_Absent_Dates, we should 
+        # normally reset the 'After Pending' list to match, unless we want to do a complex merge.
+        # But moving the call order is the primary fix.
         df["Final_Absent_Dates_After_Pending"] = new_final_dates_col
 
-    df["Final_Absent_Days"] = df["Final_Absent_Dates"].apply(len)
-    # Recalculate 'Total_Absent_After_Pending' to match the authoritative dates
-    df["Total_Absent_After_Pending"] = df["Final_Absent_Days"]
+    if "Total_Absent_After_Pending" in df.columns:
+        df["Total_Absent_After_Pending"] = df["Final_Absent_Days"]
 
     return df

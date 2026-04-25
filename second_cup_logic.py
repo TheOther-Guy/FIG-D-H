@@ -1,125 +1,3 @@
-# import pandas as pd
-# from datetime import timedelta, time # Import time for time comparisons
-# import streamlit as st # Used for st.session_state.get('debug_mode', False)
-
-# # Import helper functions from config.py
-# from config import format_timedelta_to_hms
-
-# # The calculate_second_cup_shifts function is now removed, as general Second Cup locations
-# # will be processed by the _calculate_non_second_cup_shift_details in data_processing.py,
-# # which does not include any special first-punch removal logic.
-
-# def calculate_24_hour_shifts(emp_group_full_sorted: pd.DataFrame, emp_no: str, selected_company_name: str) -> list:
-#     """
-#     Calculates shift durations for 24-hour locations (e.g., specific Second Cup stores)
-#     based on C/In and C/Out pairings. This logic allows shifts to span multiple calendar days.
-#     It conditionally removes an initial C/Out punch if it falls between 2 AM and 7 AM.
-
-#     Args:
-#         emp_group_full_sorted (pd.DataFrame): DataFrame containing all punches for a single employee, sorted by time.
-#         emp_no (str): The employee number.
-#         selected_company_name (str): The name of the selected company (should be "Second Cup").
-
-#     Returns:
-#         list: A list of dictionaries, each representing a calculated shift for the employee.
-#     """
-#     daily_report_list_for_employee = []
-#     records = emp_group_full_sorted.to_dict('records')
-    
-#     # Define the time window for ignoring initial C/Out punches
-#     ignore_start_time = time(2, 0, 0) # 2 AM
-#     ignore_end_time = time(7, 0, 0)   # 7 AM
-
-#     # Conditional removal of the first C/Out punch for 24-hour locations
-#     # Only remove if it's a C/Out AND its time falls within the 2 AM to 7 AM window
-#     if records and str(records[0]['Status']).strip().lower() == 'c/out':
-#         first_punch_time = records[0]['Original_DateTime'].time()
-#         if ignore_start_time <= first_punch_time <= ignore_end_time:
-#             if st.session_state.get('debug_mode', False):
-#                 st.write(f"DEBUG (24hr Logic): Employee {emp_no}: Initial C/Out punch {records[0]['Original_DateTime']} ignored (within 2 AM - 7 AM window).")
-#             records = records[1:]
-#         else:
-#             if st.session_state.get('debug_mode', False):
-#                 st.write(f"DEBUG (24hr Logic): Employee {emp_no}: Initial C/Out punch {records[0]['Original_DateTime']} NOT ignored (outside 2 AM - 7 AM window).")
-    
-#     i = 0
-#     while i < len(records):
-#         current_record = records[i]
-#         # Only process if it's a C/In
-#         if str(current_record['Status']).strip().lower() == 'c/in':
-#             found_cout = False
-#             potential_cout_index = -1
-            
-#             # Look for a matching C/Out anywhere after the current C/In
-#             for j in range(i + 1, len(records)):
-#                 next_record = records[j]
-                
-#                 # If the next record is a C/In, it means the current C/In is an open shift,
-#                 # or the previous C/Out was missed. Break and process current C/In as open.
-#                 if str(next_record['Status']).strip().lower() == 'c/in':
-#                     if st.session_state.get('debug_mode', False):
-#                         st.write(f"DEBUG (24hr Logic): Employee {emp_no}, C/In at {current_record['Original_DateTime']}: Found subsequent C/In at {next_record['Original_DateTime']} before C/Out. Treating as open shift.")
-#                     break # Exit inner loop, current C/In is unmatched for now
-
-#                 if str(next_record['Status']).strip().lower() == 'c/out':
-#                     # Found a C/Out, this is our match. No duration or day constraints here.
-#                     potential_cout_index = j
-#                     found_cout = True
-#                     break # Found a valid C/Out, break inner loop
-            
-#             if found_cout and potential_cout_index != -1:
-#                 matched_cout_record = records[potential_cout_index]
-#                 duration_td = matched_cout_record['Original_DateTime'] - current_record['Original_DateTime'] # Use Original_DateTime for duration
-                
-#                 daily_report_list_for_employee.append({
-#                     'No.': emp_no,
-#                     'Name': current_record['Name'],
-#                     'Date': current_record['Original_DateTime'].date(), # Shift attributed to original date of C/In
-#                     'Source_Name': current_record['Source_Name'],
-#                     'Original Number of Punches': 2, # For this pair
-#                     'Number of Cleaned Punches': 2, # For this pair
-#                     'First Punch Time': current_record['Original_DateTime'].strftime('%I:%M:%S %p'),
-#                     'Last Punch Time': matched_cout_record['Original_DateTime'].strftime('%I:%M:%S %p'),
-#                     'Total Shift Duration': format_timedelta_to_hms(duration_td),
-#                     'Total Break Duration': '00:00:00', # No breaks in this model for Second Cup
-#                     'Daily_More_T_Hours': '00:00:00', # Will be calculated later
-#                     'Daily_Short_T_Hours': '00:00:00', # Will be calculated later
-#                     'is_more_t_day': False,
-#                     'is_short_t_day': False,
-#                     'Punch Status': 'Paired C/In-C/Out Shift (24hr Logic)',
-#                     'More_T_postMID': '00:00:00' # Will be calculated later
-#                 })
-#                 i = potential_cout_index + 1 # Move past the consumed C/Out
-#             else:
-#                 # C/In without a suitable matching C/Out (open shift)
-#                 daily_report_list_for_employee.append({
-#                     'No.': emp_no,
-#                     'Name': current_record['Name'],
-#                     'Date': current_record['Original_DateTime'].date(),
-#                     'Source_Name': current_record['Source_Name'],
-#                     'Original Number of Punches': 1,
-#                     'Number of Cleaned Punches': 1,
-#                     'First Punch Time': current_record['Original_DateTime'].strftime('%I:%M:%S %p'),
-#                     'Last Punch Time': current_record['Original_DateTime'].strftime('%I:%M:%S %p'),
-#                     'Total Shift Duration': '00:00:00',
-#                     'Total Break Duration': '00:00:00',
-#                     'Daily_More_T_Hours': '00:00:00',
-#                     'Daily_Short_T_Hours': '00:00:00',
-#                     'is_more_t_day': False,
-#                     'is_short_t_day': False,
-#                     'Punch Status': 'Open Shift (Missing C/Out, 24hr Logic)',
-#                     'More_T_postMID': '00:00:00'
-#                 })
-#                 i += 1 # Move to next punch
-#         else:
-#             # C/Out or other status without a preceding C/In (ignore)
-#             if st.session_state.get('debug_mode', False):
-#                 st.write(f"DEBUG (24hr Logic): Employee {emp_no}: Unmatched punch {current_record['Original_DateTime']} ({current_record['Status']}) ignored.")
-#             i += 1
-#     return daily_report_list_for_employee
-
-
-
 import pandas as pd
 from datetime import timedelta, time
 import streamlit as st
@@ -127,14 +5,32 @@ from config import format_timedelta_to_hms
 
 def fix_uniform_status(emp_df: pd.DataFrame) -> pd.DataFrame:
     """
-    If an employee's punches are all 'C/In' or all 'C/Out',
+    If an employee's punches are heavily skewed (e.g., almost all 'C/In' or 'C/Out'),
     alternate them chronologically: first In, next Out, etc.
-    Adds column Status_Autofixed=True when applied.
+    This handles machines that erroneously record the same status for every punch.
     """
     emp_df = emp_df.sort_values("Original_DateTime").reset_index(drop=True)
-    statuses = emp_df["Status"].str.upper().tolist()
+    if emp_df.empty:
+        return emp_df
 
-    if len(set(statuses)) == 1:
+    statuses = emp_df["Status"].fillna("").astype(str).str.strip().str.upper().tolist()
+    
+    # Check for skewness (>80% same status or very low diversity)
+    from collections import Counter
+    counts = Counter(s for s in statuses if s in ["C/IN", "C/OUT"])
+    total_valid = sum(counts.values())
+    
+    should_fix = False
+    if total_valid > 1:
+        for s, count in counts.items():
+            if count / total_valid > 0.8:
+                should_fix = True
+                break
+    elif len(set(statuses)) == 1 and total_valid > 0:
+        should_fix = True
+
+    if should_fix:
+        # User requirement: First punch should be In, next Out...
         fixed_statuses = ["C/In" if i % 2 == 0 else "C/Out" for i in range(len(statuses))]
         emp_df["Status"] = fixed_statuses
         emp_df["Status_Autofixed"] = True
@@ -145,122 +41,122 @@ def fix_uniform_status(emp_df: pd.DataFrame) -> pd.DataFrame:
 
 def calculate_24_hour_shifts(emp_group_full_sorted: pd.DataFrame, emp_no: str, selected_company_name: str) -> list:
     """
-    Enhanced 24-hour shift calculation:
-    - Handles midnight (00:00–02:00) C/Outs as continuation of previous shift.
-    - Removes only the *first* orphan C/Out (1–7 AM) if no preceding C/In.
-    - Enforces 20-hour max shift window.
-    - Applies auto-status repair for uniform machines.
+    Enhanced 24-hour shift calculation for Second Cup:
+    - Automatically repairs skewed status markers (e.g., all C/In).
+    - Pairs In-Out chronologically across dates.
+    - Removes orphan C/Out ONLY if it is the absolute FIRST record for the employee.
+    - Single punches are reported with 0 duration and marked "Single Punch (Present)".
     """
     daily_report_list_for_employee = []
+    
+    # 1. Apply robust status repair
     records_df = fix_uniform_status(emp_group_full_sorted)
     records = records_df.to_dict("records")
 
+    # Configuration constants
     IGNORE_WINDOW_START = time(1, 0, 0)
     IGNORE_WINDOW_END = time(7, 0, 0)
-    MIDNIGHT_WINDOW_END = time(2, 0, 0)
     MAX_SHIFT_DURATION = timedelta(hours=20)
 
-    # Track first-record skip flag
-    is_first_record = True
-    last_shift_end = None
     i = 0
-    while i < len(records):
+    total_punches = len(records)
+    
+    while i < total_punches:
         rec = records[i]
-        status = str(rec["Status"]).strip().lower()
+        status = str(rec.get("Status", "")).strip().lower()
         rec_time = rec["Original_DateTime"].time()
 
-        # --- Skip only the very first orphan C/Out (01–07 AM) ---
-        if is_first_record and status == "c/out" and IGNORE_WINDOW_START <= rec_time <= IGNORE_WINDOW_END:
-            is_first_record = False
+        # --- SPECIAL CASE: The very first record is an orphan orphan C/Out (01–07 AM) ---
+        # Rule: Carry-over from previous day shift. We skip it as it's unpairable.
+        if i == 0 and status == "c/out" and IGNORE_WINDOW_START <= rec_time <= IGNORE_WINDOW_END:
             i += 1
             continue
 
-        is_first_record = False
-
         if status == "c/in":
             found_out = False
-            for j in range(i + 1, len(records)):
+            # Look for the next C/Out
+            for j in range(i + 1, total_punches):
                 nxt = records[j]
-                nxt_status = str(nxt["Status"]).strip().lower()
+                nxt_status = str(nxt.get("Status", "")).strip().lower()
+                
                 if nxt_status == "c/in":
+                    # Another In before an Out? Current In is a single punch for pairing purposes.
                     break
+                
                 if nxt_status == "c/out":
                     dur = nxt["Original_DateTime"] - rec["Original_DateTime"]
                     if dur <= MAX_SHIFT_DURATION:
                         found_out = True
                         end_record = nxt
-                        i = j
-                        last_shift_end = end_record["Original_DateTime"]
+                        
+                        daily_report_list_for_employee.append({
+                            "No.": emp_no,
+                            "Name": rec["Name"],
+                            "Date": rec["Original_DateTime"].date(),
+                            "Source_Name": rec["Source_Name"],
+                            "Original Number of Punches": 2,
+                            "Number of Cleaned Punches": 2,
+                            "First Punch Time": rec["Original_DateTime"].strftime("%I:%M:%S %p"),
+                            "Last Punch Time": end_record["Original_DateTime"].strftime("%I:%M:%S %p"),
+                            "Total Shift Duration": format_timedelta_to_hms(dur),
+                            "Punch Status": "Paired C/In–C/Out Shift (24hr Logic)",
+                            "Status_Autofixed": rec.get("Status_Autofixed", False),
+                            "Daily_More_T_Hours": '00:00:00',
+                            "Daily_Short_T_Hours": '00:00:00',
+                            "is_more_t_day": False,
+                            "is_short_t_day": False,
+                            "More_T_postMID": '00:00:00',
+                            "Total Break Duration": '00:00:00'
+                        })
+                        i = j # Consume both
                         break
-            if found_out:
-                dur = end_record["Original_DateTime"] - rec["Original_DateTime"]
+                    else:
+                        break
+            
+            if not found_out:
+                # Single C/In punch
                 daily_report_list_for_employee.append({
                     "No.": emp_no,
                     "Name": rec["Name"],
                     "Date": rec["Original_DateTime"].date(),
                     "Source_Name": rec["Source_Name"],
-                    "First Punch Time": rec["Original_DateTime"].strftime("%I:%M:%S %p"),
-                    "Last Punch Time": end_record["Original_DateTime"].strftime("%I:%M:%S %p"),
-                    "Total Shift Duration": format_timedelta_to_hms(dur),
-                    "Punch Status": "Paired C/In–C/Out Shift (24hr Logic)",
-                    "Status_Autofixed": rec.get("Status_Autofixed", False)
-                })
-            else:
-                daily_report_list_for_employee.append({
-                    "No.": emp_no,
-                    "Name": rec["Name"],
-                    "Date": rec["Original_DateTime"].date(),
-                    "Source_Name": rec["Source_Name"],
+                    "Original Number of Punches": 1,
+                    "Number of Cleaned Punches": 1,
                     "First Punch Time": rec["Original_DateTime"].strftime("%I:%M:%S %p"),
                     "Last Punch Time": rec["Original_DateTime"].strftime("%I:%M:%S %p"),
                     "Total Shift Duration": "00:00:00",
-                    "Punch Status": "Open Shift (Missing C/Out, 24hr Logic)",
-                    "Status_Autofixed": rec.get("Status_Autofixed", False)
+                    "Punch Status": "Single Punch (Present, 24hr Logic)",
+                    "Status_Autofixed": rec.get("Status_Autofixed", False),
+                    "Daily_More_T_Hours": '00:00:00',
+                    "Daily_Short_T_Hours": '00:00:00',
+                    "is_more_t_day": False,
+                    "is_short_t_day": False,
+                    "More_T_postMID": '00:00:00',
+                    "Total Break Duration": '00:00:00'
                 })
+        
+        elif status == "c/out":
+            # Orphan C/Out
+            daily_report_list_for_employee.append({
+                "No.": emp_no,
+                "Name": rec["Name"],
+                "Date": rec["Original_DateTime"].date(),
+                "Source_Name": rec["Source_Name"],
+                "Original Number of Punches": 1,
+                "Number of Cleaned Punches": 1,
+                "First Punch Time": rec["Original_DateTime"].strftime("%I:%M:%S %p"),
+                "Last Punch Time": rec["Original_DateTime"].strftime("%I:%M:%S %p"),
+                "Total Shift Duration": "00:00:00",
+                "Punch Status": "Single C/Out Punch (Present, 24hr Logic)",
+                "Status_Autofixed": rec.get("Status_Autofixed", False),
+                "Daily_More_T_Hours": '00:00:00',
+                "Daily_Short_T_Hours": '00:00:00',
+                "is_more_t_day": False,
+                "is_short_t_day": False,
+                "More_T_postMID": '00:00:00',
+                "Total Break Duration": '00:00:00'
+            })
+
         i += 1
 
     return daily_report_list_for_employee
-
-
-
-def _create_shift_entry(cin_rec, cout_rec, emp_no):
-    dur = cout_rec['Original_DateTime'] - cin_rec['Original_DateTime']
-    return {
-        'No.': emp_no,
-        'Name': cin_rec['Name'],
-        'Date': cin_rec['Original_DateTime'].date(),
-        'Source_Name': cin_rec['Source_Name'],
-        'Original Number of Punches': 2,
-        'Number of Cleaned Punches': 2,
-        'First Punch Time': cin_rec['Original_DateTime'].strftime('%I:%M:%S %p'),
-        'Last Punch Time': cout_rec['Original_DateTime'].strftime('%I:%M:%S %p'),
-        'Total Shift Duration': format_timedelta_to_hms(dur),
-        'Total Break Duration': '00:00:00',
-        'Daily_More_T_Hours': '00:00:00',
-        'Daily_Short_T_Hours': '00:00:00',
-        'is_more_t_day': False,
-        'is_short_t_day': False,
-        'Punch Status': 'Paired C/In–C/Out Shift (24hr Logic)',
-        'More_T_postMID': '00:00:00'
-    }
-
-def _create_single_entry(cin_rec, emp_no):
-    return {
-        'No.': emp_no,
-        'Name': cin_rec['Name'],
-        'Date': cin_rec['Original_DateTime'].date(),
-        'Source_Name': cin_rec['Source_Name'],
-        'Original Number of Punches': 1,
-        'Number of Cleaned Punches': 1,
-        'First Punch Time': cin_rec['Original_DateTime'].strftime('%I:%M:%S %p'),
-        'Last Punch Time': cin_rec['Original_DateTime'].strftime('%I:%M:%S %p'),
-        'Total Shift Duration': '00:00:00',
-        'Total Break Duration': '00:00:00',
-        'Daily_More_T_Hours': '00:00:00',
-        'Daily_Short_T_Hours': '00:00:00',
-        'is_more_t_day': False,
-        'is_short_t_day': False,
-        'Punch Status': 'Open Shift (Missing C/Out, 24hr Logic)',
-        'More_T_postMID': '00:00:00'
-    }
-

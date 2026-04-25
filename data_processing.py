@@ -219,7 +219,7 @@ class FingerprintProcessor:
             if pd.notna(min_date) and pd.notna(max_date):
                 duration_days = (max_date - min_date).days
                 
-                if duration_days > 31:
+                if duration_days > 40:
                     # Attempt AUTO-CORRECT: Strict parsing with config format if available
                     specific_format = FILE_DATE_FORMATS.get(str(source_name).strip())
                     
@@ -231,13 +231,13 @@ class FingerprintProcessor:
                         # unique_formats = [specific_format] + other_general_formats
                         # So if the specific format was valid for the data, it would have been used.
                         #
-                        # Scenario A: specific_format was used, still > 31 days. -> Real error.
+                        # Scenario A: specific_format was used, still > 40 days. -> Real error.
                         # Scenario B: specific_format failed (caught in try/catch or returned NaT), 
                         #             so it fell back to a general format which successfully parsed 
                         #             but gave wrong dates (e.g. swapped day/month).
                         #
                         # To detect Scenario B, we can try to re-parse strictly with *only* specific_format.
-                        # If that works and gives <= 31 days, we should use that.
+                        # If that works and gives <= 40 days, we should use that.
                         # But since we don't want to complicate the flow effectively "re-implementing" the parsing loop,
                         # and since we are blocking anyway...
                         #
@@ -249,7 +249,7 @@ class FingerprintProcessor:
                     raise self.DateRangeError(
                         f"File '{uploaded_file.name}' covers {duration_days} days "
                         f"({min_date.strftime('%Y-%m-%d')} to {max_date.strftime('%Y-%m-%d')}), "
-                        f"which exceeds the 31-day limit.\n"
+                        f"which exceeds the 40-day limit.\n"
                         f"Potential date format mismatch."
                     )
 
