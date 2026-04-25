@@ -582,6 +582,7 @@ STORE_OPS_LINKS = {
     "Adan Hospital": "https://docs.google.com/spreadsheets/d/1XNj1Tdr2k-JBFpj0Qod-AjEVpyVuj-t8jItVAyHl9Cw/export?format=csv",
     "JABER DENTAL": "https://docs.google.com/spreadsheets/d/1Sjlx0i7nIExBNiuewu5CFG35sLj5tfZ0SO3gsTcCEh0/export?format=csv",
     "2nd cup Warehouse": "https://docs.google.com/spreadsheets/d/1uRNl-KdUHtWx2NGVnI0tUcKx_qshwag-llvW5NKougE/export?format=csv",
+    "Ws Olympia": "https://docs.google.com/spreadsheets/d/1i1T6ED5n_JnMzwWzl4XqP1He3XtGe4ubei0IPv7IRtg/export?format=csv",
 }
 
 ############# my drive links #################

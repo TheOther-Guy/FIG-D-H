@@ -153,7 +153,7 @@ def compare_criteria_with_actual(criteria_df: pd.DataFrame, detailed_df: pd.Data
         on=["No.", "Date"],
         how="left"
     )
-    comparison["Is_Present_Actual"] = comparison["Is_Present_Actual"].fillna(False)
+    comparison["Is_Present_Actual"] = comparison["Is_Present_Actual"].fillna(False).infer_objects(copy=False)
     
     # 5. Identify Discrepancies
     # Mapping codes: PT, OFF, OH, VC, SL, AB, DP (Public Holiday), XO (Extra Off), HD/FD (Pending)

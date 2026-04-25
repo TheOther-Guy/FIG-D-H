@@ -327,6 +327,7 @@ class ReportGenerator:
         adjusted_kpi_df: pd.DataFrame,
         filename: str,
         output_buffer,
+        store_ops_overrides: dict = None
     ):
         """
         Export the final Excel report with all sheets:
@@ -546,7 +547,13 @@ class ReportGenerator:
             earliest, latest = start, end
 
             for d in all_days:
-                if d < earliest:
+                gs_status = None
+                if store_ops_overrides and emp in store_ops_overrides:
+                    gs_status = store_ops_overrides[emp].get(d)
+
+                if gs_status:
+                    flag = f"is_{str(gs_status).strip().upper()}"
+                elif d < earliest:
                     flag = "is_before_hiring"
                 elif d > latest:
                     flag = "is_after_stopWORK"
@@ -715,6 +722,11 @@ def reconcile_hybrid_absences(
 
     df["Store_Ops_Excused_Count"] = store_ops_excused_counts
     df["Final_Absent_Dates"] = new_final_dates_col
+    
+    if "Excused_Total" in df.columns:
+        df["Excused_Total"] = df["Excused_Total"].fillna(0) + df["Store_Ops_Excused_Count"]
+    else:
+        df["Excused_Total"] = df["Store_Ops_Excused_Count"]
     
     # Update Final_Absent_Days count
     df["Final_Absent_Days"] = df["Final_Absent_Dates"].apply(len)

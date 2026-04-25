@@ -267,6 +267,7 @@ class AppUI:
                 # 6) NEW: Store Operations Comparison (Applied BEFORE Pending Offs)
                 # ------------------------------------------------------------------
                 all_discrepancies = []
+                combined_overrides_map = {}
                 unique_locations = []
                 if "Source_Names" in final_summary.columns:
                     unique_locations = set([loc.strip() for sublist in final_summary["Source_Names"].str.split(",") for loc in sublist if loc.strip()])
@@ -286,6 +287,11 @@ class AppUI:
                             if not dis_df.empty:
                                 dis_df["Location"] = loc
                                 all_discrepancies.append(dis_df)
+                                
+                            for emp_k, date_map in overrides_map.items():
+                                if emp_k not in combined_overrides_map:
+                                    combined_overrides_map[emp_k] = {}
+                                combined_overrides_map[emp_k].update(date_map)
                             
                             from report_generation import reconcile_hybrid_absences
                             final_summary = reconcile_hybrid_absences(
@@ -296,6 +302,7 @@ class AppUI:
                                 global_max_date
                             )
 
+                st.session_state.store_ops_overrides_map_cache = combined_overrides_map
                 if all_discrepancies:
                     st.session_state.store_ops_discrepancies_df_cache = pd.concat(all_discrepancies, ignore_index=True)
                 else:
@@ -450,7 +457,8 @@ class AppUI:
                 st.session_state.summary_report_df_cache,
                 st.session_state.adjusted_kpi_df_cache,
                 st.session_state.download_filename_cache,
-                output
+                output,
+                store_ops_overrides=st.session_state.get("store_ops_overrides_map_cache", {})
             )
             st.download_button(
                 label="💾 Download Full Report",
