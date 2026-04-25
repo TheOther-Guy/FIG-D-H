@@ -189,7 +189,7 @@ def load_pending_offs_from_vacation(vacation_file):
                 break
         
         if target_sheet_name is None:
-            logging.warning("Pending Off sheet not found in vacation file (checked variants).")
+            logging.info("Pending Off sheet not found in vacation file. (This is expected as Store Ops is the final source of truth).")
             return pd.DataFrame(columns=["No.", "Total_Pending_OFFs"])
 
         logging.info(f"Found Pending Off sheet as: '{target_sheet_name}'")
