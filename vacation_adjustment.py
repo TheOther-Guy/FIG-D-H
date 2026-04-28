@@ -136,22 +136,12 @@ def _enumerate_absent_dates(
         dur_td = pd.to_timedelta(0)
 
     # -------------------------------------------------------
-    # 3. Detect single-punch rows
+    # 3. Detect presence
     # -------------------------------------------------------
     punch_status = emp_df.get('Punch Status', '').astype(str).str.strip().str.lower()
+    punches = pd.to_numeric(emp_df.get('Original Number of Punches', 0), errors='coerce').fillna(0).astype(int)
 
-    is_single = (
-        punch_status.eq("single punch (0 shift duration)")
-    ) | (
-        (pd.to_numeric(emp_df.get('Original Number of Punches', 0),
-                       errors='coerce').fillna(0).astype(int).eq(1))
-        & (dur_td == pd.Timedelta(0))
-    )
-
-    # -------------------------------------------------------
-    # 4. Determine presence
-    # -------------------------------------------------------
-    is_present_row = (dur_td > pd.Timedelta(0)) | is_single
+    is_present_row = (dur_td > pd.Timedelta(0)) | (punches >= 1) | punch_status.eq("single punch (0 shift duration)")
 
     present_dates = (
         pd.to_datetime(emp_df.loc[is_present_row, 'Date'], errors='coerce')

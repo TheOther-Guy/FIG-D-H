@@ -148,6 +148,16 @@ class ReportGenerator:
             Max_Date=("Date", "max"),
         ).reset_index()
 
+        # --- collect single-punch dates per employee ---
+        single_punch_rows = window_df[window_df["__is_single_punch"]]
+        single_punch_dates_map = (
+            single_punch_rows
+            .groupby("No.")["Date"]
+            .apply(lambda x: ", ".join(sorted(x.dt.strftime("%d/%m/%Y").unique())))
+            .to_dict()
+        )
+        summary["Single_Punch_Dates"] = summary["No."].map(single_punch_dates_map).fillna("")
+
         # --- window metadata ---
         total_days_period = (end_dt - start_dt).days + 1
         summary["Overall Data Start Date"] = start_dt.strftime("%Y-%m-%d")
@@ -433,6 +443,7 @@ class ReportGenerator:
             "Total_More_Than_10_Hours_Count",
             "Total_Short_Shifts_Count",
             "Total_Single_Punch_Days",
+            "Single_Punch_Dates",
             "Min_Date", "Max_Date",
             "Source_Names",
         ]
