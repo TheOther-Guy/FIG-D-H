@@ -306,7 +306,7 @@ FILE_DATE_FORMATS = {
     # alhadaba
     "Doha Store": '%m/%d/%Y %I:%M:%S %p',
 
-    "Hawally Warehouse ( Hadabah )": '%m/%d/%Y %I:%M:%S %p',
+    "Hawally Warehouse ( Hadabah )": '%d/%m/%Y %I:%M:%S %p',
     "Doha Store Warehouse": '%m/%d/%Y %I:%M:%S %p',
     "Hadaba HO": '%m/%d/%Y %I:%M:%S %p',
     "Lighting Plus": '%m/%d/%Y %I:%M:%S %p',
