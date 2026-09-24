@@ -356,7 +356,7 @@ FILE_DATE_FORMATS = {
     "Capital Governorate": '%m/%d/%Y %I:%M:%S %p',
     "Police Force": '%m/%d/%Y %I:%M:%S %p',
     "Adan Hospital": '%m/%d/%Y %I:%M:%S %p',
-    "Jaber Dental": '%m/%d/%Y %I:%M:%S %p',
+    "Scup jaber Dental": '%m/%d/%Y %I:%M:%S %p',
 
     # D&Co
     "BEBE Olympia": '%m/%d/%Y %I:%M:%S %p',
@@ -484,7 +484,7 @@ LOCATION_MAP = {
         "Police Force": "32",
         "Adan Hospital": "33",
         "DASHCO": "34",
-        "Jaber Dental": "35",
+        "Scup jaber Dental": "35",
     },
     # D&co = 2
     "D&co": {
@@ -507,7 +507,6 @@ LOCATION_MAP = {
         "Menbur Avenue": "17",
         "DCO HO": "18",
         "Hunkemoller Avenue": "19",
-        "Jaber Dental": "20",
     },
 }
 
@@ -580,7 +579,7 @@ STORE_OPS_LINKS = {
     "Khaitan": "https://docs.google.com/spreadsheets/d/1JsqzNF_M3aj_Tg7G6P_AkWjWrPUjTHjqoOdnCz62Wdc/export?format=csv",
     "Capital Governorate": "https://docs.google.com/spreadsheets/d/1L1KoxiAMxvn13zpW6hvISFhWdFqo_WkFnets58yRiyE/export?format=csv",
     "Adan Hospital": "https://docs.google.com/spreadsheets/d/1XNj1Tdr2k-JBFpj0Qod-AjEVpyVuj-t8jItVAyHl9Cw/export?format=csv",
-    "JABER DENTAL": "https://docs.google.com/spreadsheets/d/1Sjlx0i7nIExBNiuewu5CFG35sLj5tfZ0SO3gsTcCEh0/export?format=csv",
+    "Scup jaber Dental": "https://docs.google.com/spreadsheets/d/1Sjlx0i7nIExBNiuewu5CFG35sLj5tfZ0SO3gsTcCEh0/export?format=csv",
     "2nd cup Warehouse": "https://docs.google.com/spreadsheets/d/1uRNl-KdUHtWx2NGVnI0tUcKx_qshwag-llvW5NKougE/export?format=csv",
     "Ws Olympia": "https://docs.google.com/spreadsheets/d/1i1T6ED5n_JnMzwWzl4XqP1He3XtGe4ubei0IPv7IRtg/export?format=csv",
     "Ws 360": "https://docs.google.com/spreadsheets/d/1jF2SHpPS0lEvG-nxz7TLRfrU-X2yqhTbwvBiL2NYL_c/export?format=csv",
