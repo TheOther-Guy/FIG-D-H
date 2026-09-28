@@ -76,6 +76,7 @@ This means a file's dates are written in a format the app didn't expect for that
 For administrators and developers:
 
 - **Framework:** [Streamlit](https://streamlit.io) — the whole app is a Python web app; the browser interface, uploads, and downloads are all Streamlit. There is no separate database: everything is processed in memory per session.
+- **Hosting & deployment (important):** the live app runs on **Streamlit Community Cloud, which reads the code directly from this GitHub repository**. The app the team uses in the browser is whatever is on the connected branch of the repo — so **pushing a commit to GitHub is what updates the live app** (it redeploys automatically within a minute or two). Nothing is deployed manually. This also means: work in progress should not be pushed to the connected branch, and `requirements.txt` must stay accurate because Streamlit Cloud installs the app's packages from it on every deploy. Official guide: [Deploy your app on Community Cloud](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/deploy) (see also the [Community Cloud overview](https://docs.streamlit.io/deploy/streamlit-community-cloud)).
 - **Data processing:** pandas throughout. Excel files are read with openpyxl/xlrd and the final report is written with xlsxwriter.
 - **Google Sheets integration:** store operations schedules are fetched live over HTTPS as CSV exports of each store's Google Sheet (no Google account/API key needed — the sheets are read via their share links defined in `config.py` → `STORE_OPS_LINKS`).
 - **Configuration:** `config.py` is the single source of truth — companies, store codes, per-location date formats, weekend rules, and the Google Sheets links (`COMPANY_CONFIGS`, `LOCATION_MAP`, `STORE_OPS_LINKS`).
@@ -108,7 +109,9 @@ pip install -r requirements.txt
 streamlit run main.py
 ```
 
-Streamlit opens the app in your browser at `http://localhost:8501`. To let the team use it without installing anything, run it on a shared machine/server or deploy it (e.g. Streamlit Community Cloud) and share the link.
+Streamlit opens the app in your browser at `http://localhost:8501`. This local mode is only for development and testing.
+
+**The team's live version** doesn't need any of this — it is served by Streamlit Community Cloud from the GitHub repo (see *Hosting & deployment* above). To release a change: test it locally, commit, and push to the connected branch on GitHub; Streamlit Cloud picks it up and redeploys automatically.
 
 ---
 
