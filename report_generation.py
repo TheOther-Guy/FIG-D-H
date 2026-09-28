@@ -693,9 +693,9 @@ def reconcile_hybrid_absences(
     # FD : FULL DAY PENDING (Excused)
     # OFF : OFF DAY (Excused)
     # OH : HALF DAY OFF (Excused)
-    # DP : DAY OF PUBLIC HOLIDAY (Excused)
+    # DP / PH : DAY OF PUBLIC HOLIDAY (Excused)
     EXCUSED_STATUSES = {
-        "SL", "VC", "XO", "TR", "HD", "FD", "OFF", "OF", "OH", "DP"
+        "SL", "VC", "XO", "TR", "HD", "FD", "OFF", "OF", "OH", "DP", "PH"
     }
 
     for idx, row in df.iterrows():

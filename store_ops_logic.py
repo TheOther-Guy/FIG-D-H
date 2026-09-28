@@ -171,7 +171,7 @@ def compare_criteria_with_actual(criteria_df: pd.DataFrame, detailed_df: pd.Data
             return "Missing Punch (Expected Present)"
         if status in ["OFF", "OF", "OH"] and present:
             return f"Unexpected Punch (Expected {status})"
-        if status == "DP" and present:
+        if status in ["DP", "PH"] and present:
             return f"Worked on Public Holiday (Extra Off Potential)"
         if status == "XO" and present:
             return f"Worked on Extra Off day"
