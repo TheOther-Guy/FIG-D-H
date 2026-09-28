@@ -13,8 +13,8 @@ After logging in, the sidebar on the left has these pages:
 | Page | What it does |
 |------|--------------|
 | 🏠 **Home** | Welcome screen |
-| 📷 **SKU Generator** | Turns a folder of product photos (named like `P_SKUnameD1.jpg`) into a CSV file listing each SKU with its photos |
 | ⏰ **Fingerprint Reports** | The main tool — builds the employee attendance report (see guide below) |
+| 🏪 **Add New Store** | Register a new store yourself — no developer needed (see below) |
 | 🔍 **Diagnostics** | For checking a specific employee's data when something looks wrong |
 
 ---
@@ -62,12 +62,40 @@ Small typos in capitalization or extra spaces (e.g. ` ph `) are handled automati
 
 ---
 
-## ⚠️ If You See a "Date Range Exceeded" Error
+## 🏪 How to Use the "Add New Store" Page (Step by Step)
 
-This means a file's dates are written in a format the app didn't expect for that location. Either:
-1. Check you selected the **correct company** before uploading, or
-2. Fix the date format in the file and re-upload, or
-3. Ask the administrator to update the date format for that store in `config.py`.
+When a new store opens, you can register it yourself — no developer needed. In the sidebar, click **🏪 Add New Store**.
+
+### Adding a store
+
+1. **Select the company** the store belongs to.
+2. Under *"What do you want to do?"*, keep **Add a new store** selected.
+3. Type the **store name** — write it the way the team knows the store.
+4. Pick the **date format** the store's fingerprint machine uses in its export files. Not sure? Open one of its files and look at a date: `25/06/2026` = Day/Month/Year, `06/25/2026` = Month/Day/Year.
+5. Pick the **working hours**: 8 or 9 for regular stores; for Second Cup you can also choose 12 or 24 opening hours (24 turns on the round-the-clock shift logic).
+6. Check the store's **weekend days** (Mon–Sun checkboxes). If the staff don't have fixed weekends, leave all boxes **unchecked** — the store is then treated as *rotational* (1 day off per week).
+7. *(Optional but recommended)* paste the store's **Google Sheet schedule link**. Without it, the store is left out of the Store Ops schedule checks.
+8. Click **💾 Save store**.
+
+### 🔢 The store number
+
+After saving, the app shows the store's **number** — for example **141**. This is important: **rename that store's fingerprint files to this number** (`141.xlsx`, `141.csv`…) before uploading them, exactly like the existing stores. The first digit is the company (1 = D&H, 2 = D&co, 3 = Second Cup, 4 = Al-hadabah times) and the rest is the store's own code — the app picks the next free one automatically.
+
+⏳ The new store becomes usable in the Fingerprint Reports page after the app refreshes itself (about 1–2 minutes on the live app).
+
+### Updating or deleting a store
+
+On the same page, choose **Update an existing store** to change a store's date format, hours, weekends, or sheet link — its number never changes. To remove a store, use the **🗑️ Delete** section at the bottom: pick the store, tick the confirmation box, then click Delete.
+
+Only stores that were **added through this page** can be updated or deleted here. The original stores built into the app are listed for reference (open *"📋 Existing stores"* to see every store and its file number) but can only be changed by the administrator.
+
+---
+
+## 📅 Date Formats Are Handled Automatically
+
+Sometimes the fingerprint machine's export switches between day/month/year and month/day/year. You don't need to fix this yourself: the app **detects the actual date format of each file automatically** and adapts, so the report is always generated — nothing is blocked or left out.
+
+When a file's format doesn't match what's configured for that store, you'll see a **yellow "Date format notice"** above the results after generation. The report is still correct and complete; the notice just tells you which file differed, so the administrator can update `config.py` if the machine's format changed permanently.
 
 ---
 
@@ -79,7 +107,8 @@ For administrators and developers:
 - **Hosting & deployment (important):** the live app runs on **Streamlit Community Cloud, which reads the code directly from this GitHub repository**. The app the team uses in the browser is whatever is on the connected branch of the repo — so **pushing a commit to GitHub is what updates the live app** (it redeploys automatically within a minute or two). Nothing is deployed manually. This also means: work in progress should not be pushed to the connected branch, and `requirements.txt` must stay accurate because Streamlit Cloud installs the app's packages from it on every deploy. Official guide: [Deploy your app on Community Cloud](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/deploy) (see also the [Community Cloud overview](https://docs.streamlit.io/deploy/streamlit-community-cloud)).
 - **Data processing:** pandas throughout. Excel files are read with openpyxl/xlrd and the final report is written with xlsxwriter.
 - **Google Sheets integration:** store operations schedules are fetched live over HTTPS as CSV exports of each store's Google Sheet (no Google account/API key needed — the sheets are read via their share links defined in `config.py` → `STORE_OPS_LINKS`).
-- **Configuration:** `config.py` is the single source of truth — companies, store codes, per-location date formats, weekend rules, and the Google Sheets links (`COMPANY_CONFIGS`, `LOCATION_MAP`, `STORE_OPS_LINKS`).
+- **Configuration:** `config.py` holds the built-in configuration — companies, store codes, per-location date formats, weekend rules, and the Google Sheets links (`COMPANY_CONFIGS`, `LOCATION_MAP`, `STORE_OPS_LINKS`).
+- **Custom stores (Add New Store page):** stores added through the app are saved in `custom_stores.json` and merged over `config.py` at startup. The page **auto-commits that file to GitHub** using a token read from Streamlit secrets (`GITHUB_TOKEN` — a fine-grained personal access token limited to this repo with *Contents: read & write*). That commit triggers the normal Streamlit Cloud redeploy, which is how new stores both persist and go live. Without the token, saves are local-only and are lost when Streamlit Cloud restarts — the page warns the user when that's the case.
 
 ### Module map
 
@@ -95,7 +124,8 @@ For administrators and developers:
 | `pending_offs.py` | Pending off-day credits logic |
 | `store_ops_logic.py` | Fetches Google Sheets schedules and finds discrepancies vs. actual punches |
 | `report_generation.py` | Builds the summary, reconciles excused absences, exports the Excel file |
-| `photo_sku.py` | The SKU Generator page |
+| `store_management.py` | The Add New Store page (add/update/delete + GitHub auto-commit) |
+| `custom_stores.json` | Stores added through the app (created on first use; merged over config.py) |
 | `diagnostics.py` | The Diagnostics page |
 | `analysis_functions.py` | Shared attendance calculation helpers |
 
@@ -115,4 +145,4 @@ Streamlit opens the app in your browser at `http://localhost:8501`. This local m
 
 ---
 
-> ⚠️ **Administrators:** company rules, store codes, date formats, and Google Sheets links live in `config.py`. Adjust them there when a store is added or a sheet link changes.
+> ⚠️ **Administrators:** everyday store additions now happen through the **Add New Store** page. `config.py` remains the place for advanced rules (employee overrides, alternating weekends, break deductions) and for editing the original built-in stores.

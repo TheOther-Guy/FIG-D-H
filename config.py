@@ -758,3 +758,69 @@ def get_expected_working_days_in_period(start_date, end_date, rules: dict) -> fl
             
             current_date += timedelta(days=1)
         return float(expected_days) # Return float even for fixed, for consistency
+
+
+# ----------------------------------------------------------------------
+# CUSTOM STORES OVERLAY (managed by the Store Management page)
+# ----------------------------------------------------------------------
+# Stores added through the app live in custom_stores.json (committed to
+# GitHub by the Store Management page). They are merged into the config
+# structures above at import time, so the rest of the app sees them as if
+# they were defined here. This section only ADDS configuration; it does
+# not change any calculation logic.
+import json as _json
+import os as _os
+
+CUSTOM_STORES_FILE = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "custom_stores.json")
+
+
+def load_custom_stores() -> dict:
+    """Returns the custom stores overlay: { company: { store_name: {...} } }."""
+    try:
+        with open(CUSTOM_STORES_FILE, encoding="utf-8") as f:
+            data = _json.load(f)
+        return data if isinstance(data, dict) else {}
+    except FileNotFoundError:
+        return {}
+    except Exception:
+        # A broken JSON must never stop the app; the overlay is simply skipped.
+        return {}
+
+
+def _apply_custom_stores():
+    for company, stores in load_custom_stores().items():
+        if not isinstance(stores, dict):
+            continue
+        for name, s in stores.items():
+            if not isinstance(s, dict):
+                continue
+            # 1) File-number mapping (numeric filenames -> store name)
+            if s.get("code"):
+                LOCATION_MAP.setdefault(company, {})[name] = str(s["code"])
+            # 2) Date format of the fingerprint export
+            if s.get("date_format"):
+                FILE_DATE_FORMATS[name] = s["date_format"]
+            # 3) Google Sheet schedule link for Store Ops checks
+            if s.get("store_ops_link"):
+                STORE_OPS_LINKS[name] = s["store_ops_link"]
+            # 4) Location rules (weekends + working hours)
+            rules = {"weekend_days": s.get("weekend_days", []), "is_rotational_off": False}
+            wh = s.get("working_hours")
+            if wh in (8, 9):
+                rules["standard_shift_hours"] = wh
+                rules["short_t_threshold_hours"] = wh - 0.5
+                rules["more_t_start_hours"] = wh + 1
+            elif wh in (12, 24):
+                rules["opening_hours_count"] = wh
+                if wh == 24:
+                    rules["is_24_hour_location"] = True
+            if not s.get("weekend_days"):
+                # No fixed weekend -> rotational offs (matches existing app logic)
+                rules["is_rotational_off"] = True
+                rules["rotational_days_off_per_week"] = 1
+            company_cfg = COMPANY_CONFIGS.setdefault(company, {"default_rules": {}, "location_rules": {}})
+            existing_rules = company_cfg.setdefault("location_rules", {}).get(name, {})
+            company_cfg["location_rules"][name] = merge_configs(existing_rules, rules)
+
+
+_apply_custom_stores()

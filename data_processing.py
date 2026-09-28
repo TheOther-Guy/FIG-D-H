@@ -32,6 +32,10 @@ class FingerprintProcessor:
         """Custom exception for files exceeding the allowed date range."""
         pass
 
+    # A correct fingerprint export covers a short period; a parse whose span
+    # exceeds this is treated as a wrong date format (day/month swapped).
+    MAX_SPAN_DAYS = 40
+
     def __init__(self, selected_company_name: str):
         """
         Initializes the FingerprintProcessor.
@@ -44,6 +48,7 @@ class FingerprintProcessor:
         self.true_global_min_date = None # Earliest date across all RAW data
         self.true_global_max_date = None # Latest date across all RAW data
         self.error_log = [] # To store any processing errors
+        self.format_notices = [] # Date-format adaptations to report after the run
 
 
 
@@ -180,18 +185,56 @@ class FingerprintProcessor:
                 if fmt not in date_formats_for_this_file:
                     date_formats_for_this_file.append(fmt)
 
-            parsed_series = pd.Series(pd.NaT, index=df.index)
+            # ------------------------------------------------------------------
+            # DATE FORMAT AUTO-DETECTION
+            # The team sometimes flips day/month on the machine export. Instead
+            # of parsing row-by-row with the first format that happens to work,
+            # every candidate format is assessed against the whole column and
+            # the winner is the one that parses the most rows AND yields a
+            # plausible period (span <= MAX_SPAN_DAYS — the period date-range
+            # rule). The config.py format is tried first, so it wins ties.
+            # ------------------------------------------------------------------
             original_datetime_col = df['Date/Time'].copy()
+
+            candidate_results = []
             for fmt in date_formats_for_this_file:
-                unparsed_mask = parsed_series.isnull()
-                if unparsed_mask.any():
-                    parsed_series[unparsed_mask] = pd.to_datetime(
-                        original_datetime_col[unparsed_mask],
-                        format=fmt,
-                        errors='coerce'
+                parsed = pd.to_datetime(original_datetime_col, format=fmt, errors='coerce')
+                parsed_count = int(parsed.notna().sum())
+                if parsed_count == 0:
+                    continue
+                span_days = (parsed.max() - parsed.min()).days
+                candidate_results.append(
+                    {'format': fmt, 'parsed': parsed, 'count': parsed_count, 'span_days': span_days}
+                )
+
+            chosen = None
+            if candidate_results:
+                within_period = [c for c in candidate_results if c['span_days'] <= self.MAX_SPAN_DAYS]
+                pool = within_period if within_period else candidate_results
+                chosen = max(pool, key=lambda c: c['count'])
+
+            if chosen is not None:
+                parsed_series = chosen['parsed'].copy()
+                # Rows the chosen format could not parse fall back to the other
+                # candidates (keeps mixed-format files working as before).
+                for cand in candidate_results:
+                    if cand is chosen:
+                        continue
+                    unparsed_mask = parsed_series.isnull()
+                    if not unparsed_mask.any():
+                        break
+                    parsed_series[unparsed_mask] = cand['parsed'][unparsed_mask]
+
+                if specific_format and chosen['format'] != specific_format:
+                    self.format_notices.append(
+                        f"**{uploaded_file.name}** (location: {source_name}): dates are in "
+                        f"{self._describe_format(chosen['format'])}, but config.py expects "
+                        f"{self._describe_format(specific_format)} for this location. "
+                        f"The file was read with the detected format and is included in the report. "
+                        f"If the machine's export format changed permanently, update config.py."
                     )
-                else:
-                    break
+            else:
+                parsed_series = pd.Series(pd.NaT, index=df.index)
 
             df['Date/Time'] = parsed_series
             df.dropna(subset=['Date/Time'], inplace=True)
@@ -207,51 +250,24 @@ class FingerprintProcessor:
             )
 
         # ------------------------------------------------------------------
-        # NEW DATE INTEGRITY CHECK (Strictly for numerical filenames)
+        # PERIOD DATE-RANGE CHECK (non-blocking)
+        # A correct parse always falls within a short reporting period. If the
+        # span still exceeds the limit after auto-detection, the run is NOT
+        # blocked anymore: the file stays in and the issue is reported to the
+        # user after processing finishes.
         # ------------------------------------------------------------------
-        # We check only if the base filename is purely digits (e.g. "101.xlsx")
-        is_numeric_filename = base_name.isdigit()
-
-        if is_numeric_filename:
-            min_date = df['Date/Time'].min()
-            max_date = df['Date/Time'].max()
-            
-            if pd.notna(min_date) and pd.notna(max_date):
-                duration_days = (max_date - min_date).days
-                
-                if duration_days > 40:
-                    # Attempt AUTO-CORRECT: Strict parsing with config format if available
-                    specific_format = FILE_DATE_FORMATS.get(str(source_name).strip())
-                    
-                    if specific_format:
-                        # If a specific format exists, we check if strictly parsing with ONLY that format
-                        # would yield a valid range. 
-                        # Ideally, we would re-parse. However, the logic above (lines 170-191) 
-                        # *already prioritizes* specific_format.
-                        # unique_formats = [specific_format] + other_general_formats
-                        # So if the specific format was valid for the data, it would have been used.
-                        #
-                        # Scenario A: specific_format was used, still > 40 days. -> Real error.
-                        # Scenario B: specific_format failed (caught in try/catch or returned NaT), 
-                        #             so it fell back to a general format which successfully parsed 
-                        #             but gave wrong dates (e.g. swapped day/month).
-                        #
-                        # To detect Scenario B, we can try to re-parse strictly with *only* specific_format.
-                        # If that works and gives <= 40 days, we should use that.
-                        # But since we don't want to complicate the flow effectively "re-implementing" the parsing loop,
-                        # and since we are blocking anyway...
-                        #
-                        # Actually, if specific_format *failed* earlier, re-trying it won't help unless 
-                        # we think the fallback *masked* the error by providing a "working but wrong" parse.
-                        pass
-
-                    # Raise customizable blocking error
-                    raise self.DateRangeError(
-                        f"File '{uploaded_file.name}' covers {duration_days} days "
-                        f"({min_date.strftime('%Y-%m-%d')} to {max_date.strftime('%Y-%m-%d')}), "
-                        f"which exceeds the 40-day limit.\n"
-                        f"Potential date format mismatch."
-                    )
+        min_date = df['Date/Time'].min()
+        max_date = df['Date/Time'].max()
+        if pd.notna(min_date) and pd.notna(max_date):
+            duration_days = (max_date - min_date).days
+            if duration_days > self.MAX_SPAN_DAYS:
+                self.format_notices.append(
+                    f"**{uploaded_file.name}** (location: {source_name}): parsed dates cover "
+                    f"{duration_days} days ({min_date.strftime('%Y-%m-%d')} to {max_date.strftime('%Y-%m-%d')}), "
+                    f"which exceeds the {self.MAX_SPAN_DAYS}-day period expectation even after trying "
+                    f"all known date formats. The file was still included — please verify its dates "
+                    f"and this location's format in config.py."
+                )
 
         if 'Status' not in df.columns:
             df['Status'] = ''
@@ -276,7 +292,7 @@ class FingerprintProcessor:
         list_of_dfs = []
         self.error_log = [] # Reset error log for new processing run
         self.global_status_present = False # Reset global status flag
-        blocking_errors = [] # List to collect blocking errors (DateRangeError)
+        self.format_notices = [] # Reset date-format notices for new run
 
         if not uploaded_files:
             self.error_log.append({'Filename': 'N/A', 'Error': 'No files uploaded to process.'})
@@ -286,20 +302,9 @@ class FingerprintProcessor:
             try:
                 df = self._process_single_file(uploaded_file)
                 list_of_dfs.append(df)
-            except self.DateRangeError as dre:
-                # Collect blocking date range errors separately
-                blocking_errors.append(f"{uploaded_file.name}: {str(dre)}")
             except Exception as e:
                 error_message = f"Error processing {uploaded_file.name}: {type(e).__name__}: {e}"
                 self.error_log.append({'Filename': uploaded_file.name, 'Error': error_message})
-
-        # If any blocking errors occurred, stop everything and return/raise specific structure
-        if blocking_errors:
-            # We insert a specific return/raise that the UI can catch.
-            # Returning a dict with a specific key "blocking_errors" is one way,
-            # but process_uploaded_files is expected to return a DataFrame.
-            # Raising an exception that the UI catches is cleaner.
-            raise self.DateRangeError("\n".join(blocking_errors))
 
         if not list_of_dfs:
             return pd.DataFrame()
@@ -810,6 +815,19 @@ class FingerprintProcessor:
     def get_error_log(self) -> list:
         """Returns the accumulated error log."""
         return self.error_log
+
+    def get_format_notices(self) -> list:
+        """Returns the date-format adaptation notices collected during processing."""
+        return self.format_notices
+
+    @staticmethod
+    def _describe_format(fmt: str) -> str:
+        """Turns a strptime format into a phrase non-technical users understand."""
+        if fmt.startswith('%d'):
+            return f"day/month/year order (`{fmt}`)"
+        if fmt.startswith('%m'):
+            return f"month/day/year order (`{fmt}`)"
+        return f"`{fmt}`"
 
     def get_global_dates(self) -> tuple[date, date]:
         """Returns the true global min and max dates of the dataset."""

@@ -56,6 +56,8 @@ class AppUI:
             st.session_state.blocking_error = None
         if 'store_ops_discrepancies_df_cache' not in st.session_state:
             st.session_state.store_ops_discrepancies_df_cache = pd.DataFrame()
+        if 'format_notices_cache' not in st.session_state:
+            st.session_state.format_notices_cache = []
 
     def display_main_page(self):
         """Displays the main Streamlit page for the fingerprint report generator."""
@@ -119,6 +121,13 @@ class AppUI:
             )
 
         if st.session_state.processed_data_present:
+            format_notices = st.session_state.get('format_notices_cache') or []
+            if format_notices:
+                st.warning(
+                    "📅 **Date format notice** — the reports below were generated successfully, "
+                    "but the date format of these files did not match the expected format and "
+                    "was auto-adapted:\n\n" + "\n".join(f"- {n}" for n in format_notices)
+                )
             self._display_reports(selected_company_name)
             self._display_download_button()
 
@@ -134,6 +143,7 @@ class AppUI:
         st.session_state.pending_offs_df_cache = pd.DataFrame()
         st.session_state.store_ops_discrepancies_df_cache = pd.DataFrame()
         st.session_state.blocking_error = None # Clear blocking error on reset
+        st.session_state.format_notices_cache = [] # Clear date-format notices on reset
 
         # Meta / helper caches
         st.session_state.error_log_df_cache = pd.DataFrame()
@@ -197,6 +207,8 @@ class AppUI:
             detailed_report_df = processor.calculate_daily_reports(combined_df)
             error_log = processor.get_error_log()
             global_min_date, global_max_date = processor.get_global_dates()
+            # Date-format adaptations detected during parsing; shown after the run
+            st.session_state.format_notices_cache = processor.get_format_notices()
 
             # Cache detailed + date window for use in UI
             st.session_state.detailed_report_df_cache = detailed_report_df

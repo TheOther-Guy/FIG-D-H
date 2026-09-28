@@ -1,6 +1,4 @@
 import streamlit as st
-# Import the page functions from photo_sku.py
-from photo_sku import photo_sku_generator_page
 # Import the new AppUI class
 from app_ui import AppUI
 # Import the new login page function
@@ -40,10 +38,10 @@ def main():
             st.header("Navigation")
             if st.button("🏠 Home", use_container_width=True, key="nav_home"):
                 st.session_state.page = 'home'
-            if st.button("📷 SKU Generator", use_container_width=True, key="nav_sku"):
-                st.session_state.page = 'sku_generator'
             if st.button("⏰ Fingerprint Reports", use_container_width=True, key="nav_fingerprint"):
                 st.session_state.page = 'fingerprint_reports'
+            if st.button("🏪 Add New Store", use_container_width=True, key="nav_store_mgmt"):
+                st.session_state.page = 'store_management'
 
             if st.button("🔍 Diagnostics", use_container_width=True, key="nav_diagnostics"):
                 st.session_state.page = 'diagnostics'
@@ -60,12 +58,13 @@ def main():
         # --- Display Pages based on session state ---
         if st.session_state.page == 'home':
             home_page()
-        elif st.session_state.page == 'sku_generator':
-            photo_sku_generator_page()
         elif st.session_state.page == 'fingerprint_reports':
             # Instantiate AppUI and display its main page
             app_ui_instance = AppUI()
             app_ui_instance.display_main_page()
+        elif st.session_state.page == 'store_management':
+            from store_management import store_management_page
+            store_management_page()
         # Add conditions for other pages here
 
 if __name__ == "__main__":
